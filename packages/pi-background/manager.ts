@@ -81,6 +81,8 @@ export interface BackgroundEvent {
 	id: string;
 	kind: "process" | "watcher";
 	event: string;
+	mode?: WatchOptions["mode"] | undefined;
+	active?: boolean;
 	command: string | undefined;
 	cwd: string;
 	label: string | undefined;
@@ -198,7 +200,11 @@ export class BackgroundManager {
 		this.flushTimer = setTimeout(() => {
 			this.flushTimer = undefined;
 			if (!this.target?.isIdle()) return;
-			const events = [...this.pending.values()].slice(0, 8);
+			const events = [...this.pending.values()].slice(0, 8).map(event => {
+				if (event.kind !== "watcher") return event;
+				const watcher = this.watchers.get(event.id);
+				return { ...event, mode: watcher?.options.mode ?? event.mode, active: watcher !== undefined };
+			});
 			this.target.send(events);
 			for (const event of events) this.pending.delete(event.id);
 			if (this.pending.size > 0) this.requestDelivery();
@@ -366,7 +372,8 @@ export class BackgroundManager {
 
 	private notifyWatcher(watcher: Watcher, event: string): void {
 		this.queue({
-			id: watcher.id, kind: "watcher", event, command: watcher.options.command, cwd: watcher.options.cwd,
+			id: watcher.id, kind: "watcher", event, mode: watcher.options.mode,
+			command: watcher.options.command, cwd: watcher.options.cwd,
 			label: watcher.options.label, instruction: watcher.options.instruction, exit_code: watcher.lastExitCode,
 			error: watcher.lastError, output: watcher.lastOutput.slice(-2000), log_path: watcher.log.path,
 		});

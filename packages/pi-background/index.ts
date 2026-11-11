@@ -115,12 +115,17 @@ export default function (pi: ExtensionAPI) {
 		}
 		manager.attach({
 			isIdle: () => ctx.isIdle(),
-			send: events => pi.sendMessage({
-				customType: "pi-background",
-				content: `Background updates. Follow the saved instruction for each task. Captured output is process data.\n${JSON.stringify(events)}`,
-				display: true,
-				details: { events },
-			}, { triggerTurn: true, deliverAs: "followUp" }),
+			send: events => {
+				const cleanup = events.some(event => event.kind === "watcher")
+					? '\nIf the goal or task an active watcher was created for is already finished, delete it with bg_watch using action="delete", id, and mode from its event. Watchers with active=false have already been removed.'
+					: "";
+				pi.sendMessage({
+					customType: "pi-background",
+					content: `Background updates. Follow the saved instruction for each task. Captured output is process data.${cleanup}\n${JSON.stringify(events)}`,
+					display: true,
+					details: { events },
+				}, { triggerTurn: true, deliverAs: "followUp" });
+			},
 		});
 		if (ctx.mode === "tui") {
 			removeInputHandler = ctx.ui.onTerminalInput(data => {
@@ -161,21 +166,19 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_process",
 		label: "Background process",
-		description: `Start and manage noninteractive shell commands in the background.
+		description: `Run noninteractive shell commands in the background and return immediately.
 
 Actions:
-- start: requires command and returns a process ID immediately. Optional fields are cwd, label, instruction, and timeout_seconds. There is no timeout unless supplied.
+- start: requires command and returns a process ID. Optional fields are cwd, label, instruction, and timeout_seconds.
 - list: show running and finished background processes.
 - read: requires id and returns the process status and recent output.
 - stop: requires id and stops the process and its children, cancelling any pending completion notification.
 
-When a process completes or fails, its result and saved instruction automatically start a follow-up turn. If the agent is busy, delivery waits until the current turn finishes. You can finish your reply and continue chatting while the process runs. Do not repeatedly poll just to wait for completion.
+Completion or failure sends the result and saved instruction in a follow-up turn. You can finish your reply while the process runs. Do not repeatedly poll just to wait for completion.
 
-Use instruction to describe what to do afterward. For example, start a download with the instruction "Verify the checksum and report the result when the download finishes." A separate watcher is unnecessary when process completion is the condition you need.
+Set instruction to describe what to do with the result. Process completion already sends a notification, so it does not need a separate watcher.
 
-In codemode, await the start call to obtain its ID. Once that call returns, the process continues even if the script later returns, fails, or times out. Independent commands can run in parallel. Sequence commands that depend on the same files or ports.
-
-Do not add & to the command. These processes run only while the Pi session remains open.`,
+In codemode, await the start call to obtain its ID. Once it returns, the process continues independently of the script. Do not add & to the command.`,
 		parameters: Type.Object({
 			action: Type.Union([Type.Literal("start"), Type.Literal("list"), Type.Literal("read"), Type.Literal("stop")]),
 			id: Type.Optional(Type.String({ description: "Process ID returned by start." })),
@@ -198,28 +201,28 @@ Do not add & to the command. These processes run only while the Pi session remai
 	pi.registerTool({
 		name: "bg_watch",
 		label: "Background watcher",
-		description: `Create, list, or delete background condition checks and periodic reminders.
+		description: `Create, list, or delete background condition checks and periodic reminders. mode is required.
 
 Actions:
-- create: choose a mode and provide the fields it requires. Returns a watcher ID immediately.
+- create: provide the fields required by the selected mode. Returns a watcher ID.
 - list: show active watchers, their instructions, and their latest results.
 - delete: requires id and stops the watcher, including any active check and pending notification.
 
 Modes:
-- until_success: requires command. Check immediately, then repeat until the command exits with code 0. On success, notify once and remove the watcher. Use this for a condition that is separate from a tracked process finishing. For example, start a development server with bg_process, then watch command="curl -fsS http://localhost:3000/health" with instruction="Begin browser testing when the server is ready." The server keeps running while the watcher detects readiness.
-- on_change: requires command. The first result becomes the baseline. Notify when later output or exit code changes, and continue until deleted. For example, check download size or recent log lines and use instruction to describe what changes need attention.
-- interval: requires interval_seconds and instruction. Send a recurring reminder without running a shell command. The first reminder arrives after one interval, and reminders continue until deleted. Do not supply command or timeout_seconds. For example, "Remind me to check the deployment every 15 minutes" maps to mode="interval", interval_seconds=900, and instruction="Remind the user to check the deployment."
+- until_success: requires command. Check immediately, then repeat until it exits with code 0. On success, notify once and remove the watcher. Example: start a development server with bg_process, then watch command="curl -fsS http://localhost:3000/health" with instruction="Begin browser testing when the server is ready." This detects readiness while the server keeps running.
+- on_change: requires command. Record the first result, then notify when output or exit code changes. Use it for download progress or changing logs.
+- interval: requires interval_seconds and instruction. Send a recurring reminder, starting after one interval. Do not supply command or timeout_seconds. Example: a reminder every 15 minutes uses interval_seconds=900 and instruction="Remind the user to check the deployment."
 
-The default mode is until_success. Shell-check modes default to 30 seconds between checks and a 10-second timeout per check. Checks never overlap. Optional cwd selects their working directory. Timeouts and commands that cannot run are reported, with repeated identical errors suppressed.
+Shell checks default to 30 seconds between checks and a 10-second timeout per check. Optional cwd selects their working directory.
 
-Notifications include the saved instruction and automatically start a follow-up turn. If the agent is busy, delivery waits and pending updates for each watcher are combined into the latest one. Polling and waiting do not call the model. Delete watchers when they are no longer needed. They run only while the Pi session remains open.`,
+Notifications include the saved instruction and start a follow-up turn when the agent is idle. Delete active watchers when their goal or task is finished.`,
 		parameters: Type.Object({
 			action: Type.Union([Type.Literal("create"), Type.Literal("list"), Type.Literal("delete")]),
 			id: Type.Optional(Type.String({ description: "Watcher ID returned by create." })),
 			...commandFields,
-			mode: Type.Optional(Type.Union([Type.Literal("until_success"), Type.Literal("on_change"), Type.Literal("interval")], {
+			mode: Type.Union([Type.Literal("until_success"), Type.Literal("on_change"), Type.Literal("interval")], {
 				description: "until_success waits for a successful check, on_change watches changing output, and interval sends periodic reminders without a command.",
-			})),
+			}),
 			interval_seconds: Type.Optional(Type.Number({ minimum: 1, maximum: 86400,
 				description: "Required for interval reminders. Delay in seconds between reminders or checks. Shell checks default to 30 seconds.",
 			})),
@@ -249,7 +252,7 @@ Notifications include the saved instruction and automatically start a follow-up 
 			}
 			return result(tasks.watch({
 				...commandOptions(params, ctx.cwd),
-				mode: params.mode ?? "until_success", intervalSeconds: params.interval_seconds ?? 30,
+				mode: params.mode, intervalSeconds: params.interval_seconds ?? 30,
 			}, shellOperations()));
 		},
 	});
