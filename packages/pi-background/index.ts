@@ -40,7 +40,8 @@ const processOutput = Type.Object({
 });
 const watcherOutput = Type.Object({
 	...taskOutputFields,
-	mode: Type.Union([Type.Literal("until_success"), Type.Literal("on_change")]), interval_seconds: Type.Number(),
+	command: Type.Optional(Type.String()), instruction: Type.Optional(Type.String()),
+	mode: Type.Union([Type.Literal("until_success"), Type.Literal("on_change"), Type.Literal("interval")]), interval_seconds: Type.Number(),
 	last_check: Type.Optional(Type.String()), last_exit_code: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
 	last_error: Type.Optional(Type.String()), output: Type.Optional(Type.String()),
 	log_path: Type.Optional(Type.String()), log_truncated: Type.Optional(Type.Boolean()),
@@ -102,10 +103,12 @@ export default function (pi: ExtensionAPI) {
 			const legacyDirectory = join(getAgentDir(), "background", `session-${encodeURIComponent(sessionId)}`);
 			manager = new BackgroundManager(existsSync(legacyDirectory) ? legacyDirectory : logDirectory);
 			managers.set(sessionId, manager);
+		} else {
+			// Refresh methods while keeping running jobs through /reload.
+			Object.setPrototypeOf(manager, BackgroundManager.prototype);
 		}
 		try {
-			// Existing managers can come from the extension version loaded before /reload.
-			const warning = BackgroundManager.prototype.relocateLogs.call(manager, logDirectory);
+			const warning = manager.relocateLogs(logDirectory);
 			if (warning) ctx.ui.notify(warning, "warning");
 		} catch (error) {
 			ctx.ui.notify(`Could not move logs. They remain at ${manager.logDirectory}: ${error instanceof Error ? error.message : String(error)}`, "warning");
@@ -158,7 +161,21 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_process",
 		label: "Background process",
-		description: "Start a background command and return immediately. You may finish your reply and continue chatting. Completion or failure automatically starts a follow-up turn with the result. Do not repeatedly poll while waiting. Use read for interim output, list for status, or stop to terminate a process and its children.",
+		description: `Start and manage noninteractive shell commands in the background.
+
+Actions:
+- start: requires command and returns a process ID immediately. Optional fields are cwd, label, instruction, and timeout_seconds. There is no timeout unless supplied.
+- list: show running and finished background processes.
+- read: requires id and returns the process status and recent output.
+- stop: requires id and stops the process and its children, cancelling any pending completion notification.
+
+When a process completes or fails, its result and saved instruction automatically start a follow-up turn. If the agent is busy, delivery waits until the current turn finishes. You can finish your reply and continue chatting while the process runs. Do not repeatedly poll just to wait for completion.
+
+Use instruction to describe what to do afterward. For example, start a download with the instruction "Verify the checksum and report the result when the download finishes." A separate watcher is unnecessary when process completion is the condition you need.
+
+In codemode, await the start call to obtain its ID. Once that call returns, the process continues even if the script later returns, fails, or times out. Independent commands can run in parallel. Sequence commands that depend on the same files or ports.
+
+Do not add & to the command. These processes run only while the Pi session remains open.`,
 		parameters: Type.Object({
 			action: Type.Union([Type.Literal("start"), Type.Literal("list"), Type.Literal("read"), Type.Literal("stop")]),
 			id: Type.Optional(Type.String({ description: "Process ID returned by start." })),
@@ -181,13 +198,32 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "bg_watch",
 		label: "Background watcher",
-		description: "Run a shell check on an interval without spending model turns on polling. until_success notifies once when the command exits 0 and removes itself. on_change uses the first result as a baseline and notifies when output or exit code changes. Notifications include the saved instruction and start a follow-up turn. Delete watchers when no longer needed.",
+		description: `Create, list, or delete background condition checks and periodic reminders.
+
+Actions:
+- create: choose a mode and provide the fields it requires. Returns a watcher ID immediately.
+- list: show active watchers, their instructions, and their latest results.
+- delete: requires id and stops the watcher, including any active check and pending notification.
+
+Modes:
+- until_success: requires command. Check immediately, then repeat until the command exits with code 0. On success, notify once and remove the watcher. Use this for a condition that is separate from a tracked process finishing. For example, start a development server with bg_process, then watch command="curl -fsS http://localhost:3000/health" with instruction="Begin browser testing when the server is ready." The server keeps running while the watcher detects readiness.
+- on_change: requires command. The first result becomes the baseline. Notify when later output or exit code changes, and continue until deleted. For example, check download size or recent log lines and use instruction to describe what changes need attention.
+- interval: requires interval_seconds and instruction. Send a recurring reminder without running a shell command. The first reminder arrives after one interval, and reminders continue until deleted. Do not supply command or timeout_seconds. For example, "Remind me to check the deployment every 15 minutes" maps to mode="interval", interval_seconds=900, and instruction="Remind the user to check the deployment."
+
+The default mode is until_success. Shell-check modes default to 30 seconds between checks and a 10-second timeout per check. Checks never overlap. Optional cwd selects their working directory. Timeouts and commands that cannot run are reported, with repeated identical errors suppressed.
+
+Notifications include the saved instruction and automatically start a follow-up turn. If the agent is busy, delivery waits and pending updates for each watcher are combined into the latest one. Polling and waiting do not call the model. Delete watchers when they are no longer needed. They run only while the Pi session remains open.`,
 		parameters: Type.Object({
 			action: Type.Union([Type.Literal("create"), Type.Literal("list"), Type.Literal("delete")]),
 			id: Type.Optional(Type.String({ description: "Watcher ID returned by create." })),
-			mode: Type.Optional(Type.Union([Type.Literal("until_success"), Type.Literal("on_change")])),
-			interval_seconds: Type.Optional(Type.Number({ minimum: 1, maximum: 86400, description: "Delay between checks. Defaults to 30 seconds." })),
 			...commandFields,
+			mode: Type.Optional(Type.Union([Type.Literal("until_success"), Type.Literal("on_change"), Type.Literal("interval")], {
+				description: "until_success waits for a successful check, on_change watches changing output, and interval sends periodic reminders without a command.",
+			})),
+			interval_seconds: Type.Optional(Type.Number({ minimum: 1, maximum: 86400,
+				description: "Required for interval reminders. Delay in seconds between reminders or checks. Shell checks default to 30 seconds.",
+			})),
+			instruction: Type.Optional(Type.String({ minLength: 1, description: "Required for interval reminders. What to remind the user about or do when notified." })),
 		}),
 		outputSchema: Type.Union([watcherOutput, Type.Array(watcherOutput), Type.Object({ id: Type.String(), deleted: Type.Literal(true) })]),
 		async execute(_callId, params, signal, _onUpdate, ctx) {
@@ -198,6 +234,18 @@ export default function (pi: ExtensionAPI) {
 				if (!params.id) throw new Error("Provide a watcher ID.");
 				await tasks.deleteWatcher(params.id);
 				return result({ id: params.id, deleted: true });
+			}
+			if (params.mode === "interval") {
+				if (params.interval_seconds === undefined) throw new Error("Provide interval_seconds for the reminder.");
+				if (!params.instruction?.trim()) throw new Error("Provide an instruction for the reminder.");
+				if (params.command !== undefined || params.timeout_seconds !== undefined) {
+					throw new Error("Interval reminders do not accept command or timeout_seconds.");
+				}
+				return result(tasks.watch({
+					mode: "interval", intervalSeconds: params.interval_seconds, instruction: params.instruction,
+					cwd: resolveDirectory(params.cwd, ctx.cwd),
+					...(params.label === undefined ? {} : { label: params.label }),
+				}, shellOperations()));
 			}
 			return result(tasks.watch({
 				...commandOptions(params, ctx.cwd),

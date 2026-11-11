@@ -18,10 +18,17 @@ export interface CommandOptions {
 	timeoutSeconds?: number;
 }
 
-export interface WatchOptions extends CommandOptions {
-	mode: "until_success" | "on_change";
-	intervalSeconds: number;
-}
+export type WatchOptions =
+	| (CommandOptions & { mode: "until_success" | "on_change"; intervalSeconds: number })
+	| {
+		mode: "interval";
+		intervalSeconds: number;
+		instruction: string;
+		cwd: string;
+		label?: string;
+		command?: never;
+		timeoutSeconds?: never;
+	};
 
 interface OutputLog {
 	path: string;
@@ -74,7 +81,7 @@ export interface BackgroundEvent {
 	id: string;
 	kind: "process" | "watcher";
 	event: string;
-	command: string;
+	command: string | undefined;
 	cwd: string;
 	label: string | undefined;
 	instruction: string | undefined;
@@ -331,7 +338,11 @@ export class BackgroundManager {
 	}
 
 	watch(options: WatchOptions, operations: BashOperations) {
-		if (!options.command.trim()) throw new Error("Provide a non-empty check command.");
+		if (options.mode === "interval") {
+			if (!options.instruction.trim()) throw new Error("Provide an instruction for the reminder.");
+		} else if (!options.command.trim()) {
+			throw new Error("Provide a non-empty check command.");
+		}
 		const id = `watch-${randomUUID()}`;
 		const watcher: Watcher = {
 			id, options, operations, log: this.createLog(id), controller: undefined, timer: undefined,
@@ -339,21 +350,53 @@ export class BackgroundManager {
 			lastOutput: "", previous: undefined, previousError: undefined,
 		};
 		this.watchers.set(id, watcher);
-		watcher.done = this.check(watcher);
-		return { id, command: options.command, cwd: options.cwd, mode: options.mode, interval_seconds: options.intervalSeconds };
+		if (options.mode === "interval") this.schedule(watcher);
+		else watcher.done = this.check(watcher);
+		return {
+			id, command: options.command, cwd: options.cwd, mode: options.mode,
+			interval_seconds: options.intervalSeconds, instruction: options.instruction,
+		};
+	}
+
+	private schedule(watcher: Watcher): void {
+		if (this.disposed || !this.watchers.has(watcher.id)) return;
+		watcher.timer = setTimeout(() => { watcher.done = this.check(watcher); }, watcher.options.intervalSeconds * 1000);
+		watcher.timer.unref();
+	}
+
+	private notifyWatcher(watcher: Watcher, event: string): void {
+		this.queue({
+			id: watcher.id, kind: "watcher", event, command: watcher.options.command, cwd: watcher.options.cwd,
+			label: watcher.options.label, instruction: watcher.options.instruction, exit_code: watcher.lastExitCode,
+			error: watcher.lastError, output: watcher.lastOutput.slice(-2000), log_path: watcher.log.path,
+		});
 	}
 
 	private async check(watcher: Watcher): Promise<void> {
+		if (this.disposed || !this.watchers.has(watcher.id)) return;
+		const options = watcher.options;
+		if (options.mode === "interval") {
+			watcher.lastCheck = new Date().toISOString();
+			watcher.lastError = undefined;
+			try {
+				appendOutput(watcher.log, Buffer.from(`\n[${watcher.lastCheck}] Reminder\n`));
+			} catch (error) {
+				watcher.lastError = `Cannot write the log: ${errorMessage(error)}`;
+			}
+			this.notifyWatcher(watcher, "reminder");
+			this.schedule(watcher);
+			return;
+		}
 		const controller = new AbortController();
 		watcher.controller = controller;
 		const hash = createHash("sha256");
 		let output = Buffer.alloc(0);
 		let failure: string | undefined;
 		let exitCode: number | null = null;
-		const timeout = watcher.options.timeoutSeconds ?? 10;
+		const timeout = options.timeoutSeconds ?? 10;
 		try {
 			appendOutput(watcher.log, Buffer.from(`\n[${new Date().toISOString()}] Checking\n`));
-			const result = await watcher.operations.exec(watcher.options.command, watcher.options.cwd, {
+			const result = await watcher.operations.exec(options.command, options.cwd, {
 				signal: controller.signal, timeout,
 				onData: data => {
 					hash.update(data);
@@ -381,7 +424,7 @@ export class BackgroundManager {
 		let event: string | undefined;
 		if (failure) {
 			if (failure !== watcher.previousError) event = "check_failed";
-		} else if (watcher.options.mode === "until_success") {
+		} else if (options.mode === "until_success") {
 			if (exitCode === 0) {
 				event = "matched";
 				this.watchers.delete(watcher.id);
@@ -391,23 +434,14 @@ export class BackgroundManager {
 		}
 		watcher.previous = signature;
 		watcher.previousError = failure;
-		if (event) {
-			this.queue({
-				id: watcher.id, kind: "watcher", event, command: watcher.options.command, cwd: watcher.options.cwd,
-				label: watcher.options.label, instruction: watcher.options.instruction, exit_code: exitCode,
-				error: failure, output: watcher.lastOutput.slice(-2000), log_path: watcher.log.path,
-			});
-		}
-		if (this.watchers.has(watcher.id)) {
-			watcher.timer = setTimeout(() => { watcher.done = this.check(watcher); }, watcher.options.intervalSeconds * 1000);
-			watcher.timer.unref();
-		}
+		if (event) this.notifyWatcher(watcher, event);
+		this.schedule(watcher);
 	}
 
 	listWatchers() {
 		return [...this.watchers.values()].map(watcher => ({
 			id: watcher.id, command: watcher.options.command, cwd: watcher.options.cwd, label: watcher.options.label,
-			mode: watcher.options.mode, interval_seconds: watcher.options.intervalSeconds,
+			mode: watcher.options.mode, interval_seconds: watcher.options.intervalSeconds, instruction: watcher.options.instruction,
 			last_check: watcher.lastCheck, last_exit_code: watcher.lastExitCode, last_error: watcher.lastError,
 			output: watcher.lastOutput.slice(-2000), log_path: watcher.log.path, log_truncated: watcher.log.truncated,
 		}));
