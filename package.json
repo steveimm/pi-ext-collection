@@ -1,30 +1,25 @@
 {
-  "name": "pi-chat-template-kwargs",
-  "version": "1.0.0",
-  "description": "pi extension: override chat_template_kwargs on the fly via /chat-template",
+  "name": "pi-ext-collection",
+  "description": "Independently installable Pi extensions",
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "npm run check --workspaces"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SteveImmanuel/pi-chat-template-kwargs.git"
+    "url": "git+https://github.com/steveimm/pi-ext-collection.git"
   },
-  "keywords": [],
-  "author": "",
   "license": "MIT",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/SteveImmanuel/pi-chat-template-kwargs/issues"
+    "url": "https://github.com/steveimm/pi-ext-collection/issues"
   },
-  "homepage": "https://github.com/SteveImmanuel/pi-chat-template-kwargs#readme",
-  "private": true,
-  "pi": {
-    "extensions": [
-      "./index.ts"
-    ]
-  },
+  "homepage": "https://github.com/steveimm/pi-ext-collection#readme",
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.84.1",
+    "@types/node": "^24.19.2",
     "typescript": "^7.0.2"
-  }
+  },
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
 }

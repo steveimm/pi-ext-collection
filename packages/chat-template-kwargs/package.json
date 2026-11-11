@@ -1,0 +1,41 @@
+{
+  "name": "@steveimm/pi-chat-template-kwargs",
+  "version": "0.1.0",
+  "description": "Pi extension: override chat_template_kwargs on the fly via /ctk",
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steveimm/pi-ext-collection.git",
+    "directory": "packages/chat-template-kwargs"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/steveimm/pi-ext-collection/issues"
+  },
+  "homepage": "https://github.com/steveimm/pi-ext-collection/tree/main/packages/chat-template-kwargs#readme",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.1"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "index.ts",
+    "README.md",
+    "LICENSE"
+  ]
+}
