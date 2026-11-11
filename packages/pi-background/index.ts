@@ -1,3 +1,5 @@
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	createLocalBashOperations,
@@ -65,6 +67,7 @@ export default function (pi: ExtensionAPI) {
 	let manager: BackgroundManager | undefined;
 	let sessionId: string | undefined;
 	let removeInputHandler: (() => void) | undefined;
+	let temporaryLogDirectory: string | undefined;
 
 	function current(): BackgroundManager {
 		if (!manager) throw new Error("No active background session.");
@@ -91,10 +94,21 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", (_event, ctx) => {
 		sessionId = ctx.sessionManager.getSessionId();
+		const sessionFile = ctx.sessionManager.getSessionFile();
+		temporaryLogDirectory = sessionFile ? undefined : join(tmpdir(), `pi-session-${process.pid}-${encodeURIComponent(sessionId)}.bg`);
+		const logDirectory = sessionFile ? `${sessionFile}.bg` : temporaryLogDirectory!;
 		manager = managers.get(sessionId);
 		if (!manager) {
-			manager = new BackgroundManager(join(getAgentDir(), "background", `session-${encodeURIComponent(sessionId)}`));
+			const legacyDirectory = join(getAgentDir(), "background", `session-${encodeURIComponent(sessionId)}`);
+			manager = new BackgroundManager(existsSync(legacyDirectory) ? legacyDirectory : logDirectory);
 			managers.set(sessionId, manager);
+		}
+		try {
+			// Existing managers can come from the extension version loaded before /reload.
+			const warning = BackgroundManager.prototype.relocateLogs.call(manager, logDirectory);
+			if (warning) ctx.ui.notify(warning, "warning");
+		} catch (error) {
+			ctx.ui.notify(`Could not move logs. They remain at ${manager.logDirectory}: ${error instanceof Error ? error.message : String(error)}`, "warning");
 		}
 		manager.attach({
 			isIdle: () => ctx.isIdle(),
@@ -134,6 +148,7 @@ export default function (pi: ExtensionAPI) {
 		if (!keep) {
 			await manager.dispose();
 			managers.delete(sessionId);
+			if (temporaryLogDirectory === manager.logDirectory) rmSync(temporaryLogDirectory, { recursive: true, force: true });
 		}
 		manager = undefined;
 	});
@@ -141,7 +156,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool(createManagedBash(current, shellOptions));
 
 	pi.registerTool({
-		name: "background_process",
+		name: "bg_process",
 		label: "Background process",
 		description: "Start a background command and return immediately. You may finish your reply and continue chatting. Completion or failure automatically starts a follow-up turn with the result. Do not repeatedly poll while waiting. Use read for interim output, list for status, or stop to terminate a process and its children.",
 		parameters: Type.Object({
@@ -164,7 +179,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerTool({
-		name: "background_watch",
+		name: "bg_watch",
 		label: "Background watcher",
 		description: "Run a shell check on an interval without spending model turns on polling. until_success notifies once when the command exits 0 and removes itself. on_change uses the first result as a baseline and notifies when output or exit code changes. Notifications include the saved instruction and start a follow-up turn. Delete watchers when no longer needed.",
 		parameters: Type.Object({

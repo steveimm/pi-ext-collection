@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import { accessSync, appendFileSync, constants, mkdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	accessSync, appendFileSync, constants, cpSync, existsSync, mkdirSync, mkdtempSync,
+	realpathSync, renameSync, rmSync, statSync, writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { BashOperations } from "@earendil-works/pi-coding-agent";
 
 const MAX_TAIL_BYTES = 16 * 1024;
@@ -130,10 +133,46 @@ export class BackgroundManager {
 	private target: NotificationTarget | undefined;
 	private flushTimer: ReturnType<typeof setTimeout> | undefined;
 	private disposed = false;
-	readonly logDirectory: string;
+	logDirectory: string;
 
 	constructor(logDirectory: string) {
 		this.logDirectory = logDirectory;
+	}
+
+	relocateLogs(directory: string): string | undefined {
+		const previous = this.logDirectory;
+		if (directory === previous) return;
+		let copied = false;
+		if (existsSync(previous)) {
+			if (existsSync(directory)) throw new Error(`Log directory already exists: ${directory}`);
+			mkdirSync(dirname(directory), { recursive: true, mode: 0o700 });
+			try {
+				renameSync(previous, directory);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
+				const staging = mkdtempSync(join(dirname(directory), ".bg-"));
+				try {
+					cpSync(previous, staging, { recursive: true, force: false, errorOnExist: true });
+					renameSync(staging, directory);
+					copied = true;
+				} catch (copyError) {
+					rmSync(staging, { recursive: true, force: true });
+					throw copyError;
+				}
+			}
+		}
+		this.logDirectory = directory;
+		for (const job of [...this.processes.values(), ...this.watchers.values()]) {
+			job.log.path = join(directory, basename(job.log.path));
+		}
+		for (const event of this.pending.values()) event.log_path = join(directory, basename(event.log_path));
+		if (copied) {
+			try {
+				rmSync(previous, { recursive: true });
+			} catch {
+				return `Logs moved to ${directory}, but the old copy could not be removed from ${previous}.`;
+			}
+		}
 	}
 
 	attach(target: NotificationTarget): void {
