@@ -45,6 +45,7 @@ const processOutput = Type.Object({
 	exit_code: Type.Union([Type.Integer(), Type.Null()]), error: Type.Optional(Type.String()),
 	started_at: Type.String(), finished_at: Type.Optional(Type.String()),
 	log_path: Type.String(), log_truncated: Type.Boolean(), output: Type.Optional(Type.String()), message: Type.Optional(Type.String()),
+	output_truncated: Type.Optional(Type.Boolean()),
 });
 const watcherOutput = Type.Object({
 	...taskOutputFields,
@@ -57,7 +58,7 @@ const watcherOutput = Type.Object({
 
 function result(value: unknown): AgentToolResult<unknown> {
 	const text = JSON.stringify(value, null, 2);
-	return { content: [{ type: "text", text }], details: value, structuredContent: JSON.parse(text) };
+	return { content: [{ type: "text", text }], details: undefined, structuredContent: JSON.parse(text) };
 }
 
 function commandOptions(params: {

@@ -324,7 +324,10 @@ export class BackgroundManager {
 	readProcess(id: string) {
 		const job = this.processes.get(id);
 		if (!job) throw new Error(`Unknown background process: ${id}`);
-		return { ...processInfo(job), output: job.log.tail.toString("utf8") };
+		return {
+			...processInfo(job), output: job.log.tail.toString("utf8"),
+			output_truncated: job.log.truncated || job.log.bytes > job.log.tail.length,
+		};
 	}
 
 	async stopProcess(id: string) {

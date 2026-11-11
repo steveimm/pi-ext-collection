@@ -67,7 +67,7 @@ export function createManagedBash(
 					content: [{ type: "text", text: `The user pressed Ctrl+B to move this command to the background as ${job.id}. You can finish this turn. Completion will notify you automatically.\nLog: ${job.log_path}` }],
 					details: undefined,
 					structuredContent: { background: true, backgrounded_by: "user", id: job.id, output: job.output, log_path: job.log_path,
-						truncated: job.log_truncated, exit_code: null },
+						truncated: job.output_truncated, exit_code: null },
 				};
 			} finally {
 				if (process) manager.forgetForeground(process.id);
