@@ -225,6 +225,7 @@ export class BackgroundManager {
 	private queue(event: BackgroundEvent): void {
 		if (this.disposed) return;
 		this.pending.set(event.id, event);
+		this.changed();
 		this.requestDelivery();
 	}
 
@@ -319,7 +320,6 @@ export class BackgroundManager {
 			}
 		} finally {
 			job.finishedAt = new Date().toISOString();
-			if (job.background) this.changed();
 			if (job.background && job.status !== "stopped") {
 				this.queue({
 					id: job.id, kind: "process", event: job.status, command: job.options.command, cwd: job.options.cwd,
@@ -453,7 +453,6 @@ export class BackgroundManager {
 			if (exitCode === 0) {
 				event = "matched";
 				this.watchers.delete(watcher.id);
-				this.changed();
 			}
 		} else {
 			if (watcher.previous !== undefined && watcher.previous !== signature) event = "changed";
