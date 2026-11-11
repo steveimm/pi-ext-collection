@@ -19,8 +19,9 @@ const stateKey = Symbol.for("@steveimm/pi-background/managers");
 const shared = globalThis as typeof globalThis & { [stateKey]?: Map<string, BackgroundManager> };
 const managers = shared[stateKey] ??= new Map();
 
+const shellCommand = Type.String({ description: "Noninteractive shell command. Do not add & to background it.", minLength: 1 });
 const commandFields = {
-	command: Type.Optional(Type.String({ description: "Noninteractive shell command. Do not add & to background it.", minLength: 1 })),
+	command: Type.Optional(shellCommand),
 	cwd: Type.Optional(Type.String({ description: "Working directory, relative to the current session by default." })),
 	label: Type.Optional(Type.String({ description: "Short description of the work." })),
 	instruction: Type.Optional(Type.String({ description: "What to do when this process finishes or this watcher notifies you." })),
@@ -30,8 +31,12 @@ const commandFields = {
 const taskOutputFields = {
 	id: Type.String(), command: Type.String(), cwd: Type.String(), label: Type.Optional(Type.String()),
 };
-const watcherMode = Type.Union([Type.Literal("until_success"), Type.Literal("on_change"), Type.Literal("interval")], {
-	description: "Required for create. until_success waits for a successful check, on_change watches changing output, and interval sends periodic reminders without a command.",
+const watcherMode = Type.Union([Type.Literal("until_success"), Type.Literal("on_change"), Type.Literal("interval")]);
+const watcherInterval = Type.Number({ minimum: 1, maximum: 86400,
+	description: "Delay in seconds between reminders or checks. Shell checks default to 30 seconds.",
+});
+const watcherInstruction = Type.String({ minLength: 1,
+	description: "What to remind the user about or do when notified.",
 });
 const processOutput = Type.Object({
 	...taskOutputFields,
@@ -219,42 +224,37 @@ Modes:
 Shell checks default to 30 seconds between checks and a 10-second timeout per check. Optional cwd selects their working directory.
 
 Notifications include the saved instruction and start a follow-up turn when the agent is idle. Delete active watchers when their goal or task is finished.`,
-		parameters: Type.Object({
-			action: Type.Union([Type.Literal("create"), Type.Literal("list"), Type.Literal("delete")]),
-			id: Type.Optional(Type.String({ description: "Watcher ID returned by create." })),
-			...commandFields,
-			mode: Type.Optional(watcherMode),
-			interval_seconds: Type.Optional(Type.Number({ minimum: 1, maximum: 86400,
-				description: "Required for interval reminders. Delay in seconds between reminders or checks. Shell checks default to 30 seconds.",
-			})),
-			instruction: Type.Optional(Type.String({ minLength: 1, description: "Required for interval reminders. What to remind the user about or do when notified." })),
-		}, {
-			anyOf: [
-				Type.Object({ action: Type.Literal("create"), mode: watcherMode }),
-				Type.Object({ action: Type.Literal("list") }),
-				Type.Object({ action: Type.Literal("delete"), id: Type.String({ minLength: 1 }) }),
-			],
-		}),
+		parameters: Type.Union([
+			Type.Object({
+				...commandFields,
+				action: Type.Literal("create"),
+				mode: Type.Union([Type.Literal("until_success"), Type.Literal("on_change")]),
+				command: shellCommand,
+				interval_seconds: Type.Optional(watcherInterval),
+				instruction: Type.Optional(watcherInstruction),
+			}, { additionalProperties: false }),
+			Type.Object({
+				action: Type.Literal("create"), mode: Type.Literal("interval"),
+				interval_seconds: watcherInterval, instruction: watcherInstruction, label: commandFields.label,
+			}, { additionalProperties: false }),
+			Type.Object({ action: Type.Literal("list") }, { additionalProperties: false }),
+			Type.Object({
+				action: Type.Literal("delete"), id: Type.String({ minLength: 1, description: "Watcher ID returned by create." }),
+			}, { additionalProperties: false }),
+		], { type: "object" }),
 		outputSchema: Type.Union([watcherOutput, Type.Array(watcherOutput), Type.Object({ id: Type.String(), deleted: Type.Literal(true) })]),
 		async execute(_callId, params, signal, _onUpdate, ctx) {
 			if (signal?.aborted) throw new Error("The tool call was cancelled.");
 			const tasks = current();
 			if (params.action === "list") return result(tasks.listWatchers());
 			if (params.action === "delete") {
-				if (!params.id) throw new Error("Provide a watcher ID.");
 				await tasks.deleteWatcher(params.id);
 				return result({ id: params.id, deleted: true });
 			}
-			if (params.mode === undefined) throw new Error("mode is required when creating a watcher.");
 			if (params.mode === "interval") {
-				if (params.interval_seconds === undefined) throw new Error("Provide interval_seconds for the reminder.");
-				if (!params.instruction?.trim()) throw new Error("Provide an instruction for the reminder.");
-				if (params.command !== undefined || params.timeout_seconds !== undefined) {
-					throw new Error("Interval reminders do not accept command or timeout_seconds.");
-				}
 				return result(tasks.watch({
 					mode: "interval", intervalSeconds: params.interval_seconds, instruction: params.instruction,
-					cwd: resolveDirectory(params.cwd, ctx.cwd),
+					cwd: ctx.cwd,
 					...(params.label === undefined ? {} : { label: params.label }),
 				}, shellOperations()));
 			}
