@@ -30,6 +30,9 @@ const commandFields = {
 const taskOutputFields = {
 	id: Type.String(), command: Type.String(), cwd: Type.String(), label: Type.Optional(Type.String()),
 };
+const watcherMode = Type.Union([Type.Literal("until_success"), Type.Literal("on_change"), Type.Literal("interval")], {
+	description: "Required for create. until_success waits for a successful check, on_change watches changing output, and interval sends periodic reminders without a command.",
+});
 const processOutput = Type.Object({
 	...taskOutputFields,
 	status: Type.Union([Type.Literal("running"), Type.Literal("completed"), Type.Literal("failed"), Type.Literal("stopped")]),
@@ -41,7 +44,7 @@ const processOutput = Type.Object({
 const watcherOutput = Type.Object({
 	...taskOutputFields,
 	command: Type.Optional(Type.String()), instruction: Type.Optional(Type.String()),
-	mode: Type.Union([Type.Literal("until_success"), Type.Literal("on_change"), Type.Literal("interval")]), interval_seconds: Type.Number(),
+	mode: watcherMode, interval_seconds: Type.Number(),
 	last_check: Type.Optional(Type.String()), last_exit_code: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
 	last_error: Type.Optional(Type.String()), output: Type.Optional(Type.String()),
 	log_path: Type.Optional(Type.String()), log_truncated: Type.Optional(Type.Boolean()),
@@ -117,7 +120,7 @@ export default function (pi: ExtensionAPI) {
 			isIdle: () => ctx.isIdle(),
 			send: events => {
 				const cleanup = events.some(event => event.kind === "watcher")
-					? '\nIf the goal or task an active watcher was created for is already finished, delete it with bg_watch using action="delete", id, and mode from its event. Watchers with active=false have already been removed.'
+					? '\nIf the goal or task an active watcher was created for is already finished, delete it with bg_watch using action="delete" and id from its event. Watchers with active=false have already been removed.'
 					: "";
 				pi.sendMessage({
 					customType: "pi-background",
@@ -201,10 +204,10 @@ In codemode, await the start call to obtain its ID. Once it returns, the process
 	pi.registerTool({
 		name: "bg_watch",
 		label: "Background watcher",
-		description: `Create, list, or delete background condition checks and periodic reminders. mode is required.
+		description: `Create, list, or delete background condition checks and periodic reminders.
 
 Actions:
-- create: provide the fields required by the selected mode. Returns a watcher ID.
+- create: requires mode and the fields it specifies. Returns a watcher ID.
 - list: show active watchers, their instructions, and their latest results.
 - delete: requires id and stops the watcher, including any active check and pending notification.
 
@@ -220,13 +223,17 @@ Notifications include the saved instruction and start a follow-up turn when the 
 			action: Type.Union([Type.Literal("create"), Type.Literal("list"), Type.Literal("delete")]),
 			id: Type.Optional(Type.String({ description: "Watcher ID returned by create." })),
 			...commandFields,
-			mode: Type.Union([Type.Literal("until_success"), Type.Literal("on_change"), Type.Literal("interval")], {
-				description: "until_success waits for a successful check, on_change watches changing output, and interval sends periodic reminders without a command.",
-			}),
+			mode: Type.Optional(watcherMode),
 			interval_seconds: Type.Optional(Type.Number({ minimum: 1, maximum: 86400,
 				description: "Required for interval reminders. Delay in seconds between reminders or checks. Shell checks default to 30 seconds.",
 			})),
 			instruction: Type.Optional(Type.String({ minLength: 1, description: "Required for interval reminders. What to remind the user about or do when notified." })),
+		}, {
+			anyOf: [
+				Type.Object({ action: Type.Literal("create"), mode: watcherMode }),
+				Type.Object({ action: Type.Literal("list") }),
+				Type.Object({ action: Type.Literal("delete"), id: Type.String({ minLength: 1 }) }),
+			],
 		}),
 		outputSchema: Type.Union([watcherOutput, Type.Array(watcherOutput), Type.Object({ id: Type.String(), deleted: Type.Literal(true) })]),
 		async execute(_callId, params, signal, _onUpdate, ctx) {
@@ -238,6 +245,7 @@ Notifications include the saved instruction and start a follow-up turn when the 
 				await tasks.deleteWatcher(params.id);
 				return result({ id: params.id, deleted: true });
 			}
+			if (params.mode === undefined) throw new Error("mode is required when creating a watcher.");
 			if (params.mode === "interval") {
 				if (params.interval_seconds === undefined) throw new Error("Provide interval_seconds for the reminder.");
 				if (!params.instruction?.trim()) throw new Error("Provide an instruction for the reminder.");
