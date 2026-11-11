@@ -13,6 +13,7 @@ import {
 import { Type } from "typebox";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { createManagedBash } from "./foreground.js";
+import { attachBackgroundStatus } from "./ui.js";
 import { BackgroundManager, expandHome, resolveDirectory, type CommandOptions } from "./manager.js";
 
 const stateKey = Symbol.for("@steveimm/pi-background/managers");
@@ -77,6 +78,7 @@ export default function (pi: ExtensionAPI) {
 	let manager: BackgroundManager | undefined;
 	let sessionId: string | undefined;
 	let removeInputHandler: (() => void) | undefined;
+	let removeStatus: (() => void) | undefined;
 	let temporaryLogDirectory: string | undefined;
 
 	function current(): BackgroundManager {
@@ -137,6 +139,7 @@ export default function (pi: ExtensionAPI) {
 			},
 		});
 		if (ctx.mode === "tui") {
+			removeStatus = attachBackgroundStatus(manager, ctx);
 			removeInputHandler = ctx.ui.onTerminalInput(data => {
 				if (!matchesKey(data, "ctrl+b")) return;
 				const id = manager?.backgroundLatest();
@@ -150,6 +153,8 @@ export default function (pi: ExtensionAPI) {
 	pi.on("agent_settled", () => manager?.requestDelivery());
 
 	pi.on("session_shutdown", async event => {
+		removeStatus?.();
+		removeStatus = undefined;
 		removeInputHandler?.();
 		removeInputHandler = undefined;
 		if (!manager || !sessionId) return;

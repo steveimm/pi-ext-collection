@@ -142,10 +142,20 @@ export class BackgroundManager {
 	private target: NotificationTarget | undefined;
 	private flushTimer: ReturnType<typeof setTimeout> | undefined;
 	private disposed = false;
+	private listeners?: Set<() => void>;
 	logDirectory: string;
 
 	constructor(logDirectory: string) {
 		this.logDirectory = logDirectory;
+	}
+
+	subscribe(listener: () => void): () => void {
+		(this.listeners ??= new Set()).add(listener);
+		return () => { this.listeners?.delete(listener); };
+	}
+
+	private changed(): void {
+		for (const listener of this.listeners ?? []) listener();
 	}
 
 	relocateLogs(directory: string): string | undefined {
@@ -256,6 +266,7 @@ export class BackgroundManager {
 		job.onData = undefined;
 		job.onBackground?.();
 		job.onBackground = undefined;
+		this.changed();
 		return job.id;
 	}
 
@@ -279,6 +290,7 @@ export class BackgroundManager {
 		};
 		this.processes.set(id, job);
 		job.done = this.runProcess(job, operations);
+		if (job.background) this.changed();
 		return job;
 	}
 
@@ -307,6 +319,7 @@ export class BackgroundManager {
 			}
 		} finally {
 			job.finishedAt = new Date().toISOString();
+			if (job.background) this.changed();
 			if (job.background && job.status !== "stopped") {
 				this.queue({
 					id: job.id, kind: "process", event: job.status, command: job.options.command, cwd: job.options.cwd,
@@ -343,6 +356,7 @@ export class BackgroundManager {
 		if (job.status === "running") {
 			job.status = "stopped";
 			job.controller.abort();
+			if (job.background) this.changed();
 		}
 	}
 
@@ -361,6 +375,7 @@ export class BackgroundManager {
 		this.watchers.set(id, watcher);
 		if (options.mode === "interval") this.schedule(watcher);
 		else watcher.done = this.check(watcher);
+		this.changed();
 		return {
 			id, command: options.command, cwd: options.cwd, mode: options.mode,
 			interval_seconds: options.intervalSeconds, instruction: options.instruction,
@@ -438,6 +453,7 @@ export class BackgroundManager {
 			if (exitCode === 0) {
 				event = "matched";
 				this.watchers.delete(watcher.id);
+				this.changed();
 			}
 		} else {
 			if (watcher.previous !== undefined && watcher.previous !== signature) event = "changed";
@@ -464,6 +480,7 @@ export class BackgroundManager {
 		this.pending.delete(id);
 		clearTimeout(watcher.timer);
 		watcher.controller?.abort();
+		this.changed();
 		await watcher.done;
 	}
 
