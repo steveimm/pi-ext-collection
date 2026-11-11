@@ -1,0 +1,55 @@
+name: Publish npm package
+run-name: ${{ inputs.dry_run && 'Preview' || 'Publish' }} ${{ inputs.package }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Directory under packages, such as pi-change-dir'
+        type: string
+        required: true
+      dry_run:
+        description: 'Check the package without publishing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish-${{ inputs.package }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Select package
+        id: package
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: node .github/scripts/validate-publish.mjs
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npm test
+      - name: Preview package contents
+        env:
+          WORKSPACE: ${{ steps.package.outputs.workspace }}
+        run: npm pack --workspace="$WORKSPACE" --dry-run
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        env:
+          WORKSPACE: ${{ steps.package.outputs.workspace }}
+        run: npm publish --workspace="$WORKSPACE" --access public --ignore-scripts --registry=https://registry.npmjs.org/

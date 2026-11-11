@@ -79,27 +79,59 @@ See the [Pi package documentation](https://github.com/earendil-works/pi/blob/mai
 
 ## Publish an extension
 
-Packages use the `@steveimm` npm scope.
-Publish with the npm account that owns this scope or has publishing access to the package.
-Authenticate with npm using `npm login`.
-For later releases, increment only the changed package's version:
+Use the **Publish npm package** workflow in [GitHub Actions](https://github.com/steveimm/pi-ext-collection/actions/workflows/publish.yml).
+It publishes one extension from `main`, using the version already committed in its `package.json`.
+Other packages keep their own versions and release schedules.
+
+For an update, increment the selected package's version:
 
 ```bash
 npm version patch --workspace=packages/pi-chat-template-kwargs --no-git-tag-version
 ```
 
-Check the repository, inspect the selected package's contents, then publish it:
+Commit the package manifest and root lockfile, then push to `main`.
+On GitHub, open **Actions → Publish npm package → Run workflow**:
+
+1. Choose the `main` branch.
+2. Enter the directory name, such as `pi-chat-template-kwargs` or `pi-change-dir`, without `packages/` or the npm scope.
+3. Leave **Check the package without publishing** selected to inspect a preview run.
+4. Clear that checkbox when ready to publish.
+
+The workflow installs dependencies, runs type checks and tests, and lists the package contents before publishing.
+Versions must be stable releases, such as `0.1.1`.
+npm rejects versions that have already been published.
+The **CI** workflow also runs checks on pull requests and pushes to `main`.
+
+### Set up each npm package
+
+Publishing uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/), so GitHub does not need an npm access token.
+For each package, open its settings on npmjs.com and add a GitHub Actions trusted publisher:
+
+| Field | Value |
+| --- | --- |
+| Organization or user | `steveimm` |
+| Repository | `pi-ext-collection` |
+| Workflow filename | `publish.yml` |
+| Environment | Leave empty |
+| Allowed action | Allow direct publishing with `npm publish` |
+
+Create the connection when a release is ready.
+npm requires its first successful CI publication within two days of setup.
+
+A new package must be published once before npm allows trusted publishing configuration.
+For that first release, log in locally and publish the selected workspace:
 
 ```bash
-npm ci
+npm login
 npm run check
-npm pack --workspace=packages/pi-chat-template-kwargs --dry-run
-npm publish --workspace=packages/pi-chat-template-kwargs --access public
+npm test
+npm pack --workspace=packages/pi-change-dir --dry-run
+npm publish --workspace=packages/pi-change-dir --access public
 ```
 
-Publish only the workspace being released.
-Other extensions retain their own versions and release schedules.
-See [npm workspaces](https://docs.npmjs.com/cli/using-npm/workspaces/) and [npm publish](https://docs.npmjs.com/cli/commands/npm-publish/) for workspace commands.
+Then configure its trusted publisher and use GitHub Actions for later releases.
+Adding another directory under `packages/` does not require editing the workflows.
+See [npm's setup requirements](https://docs.npmjs.com/cli/commands/npm-trust/) and [GitHub's manual workflow guide](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
 
 ## License
 
