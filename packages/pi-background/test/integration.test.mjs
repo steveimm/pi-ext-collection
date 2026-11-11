@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -211,8 +211,10 @@ await tools.bash({command: "(sleep 4; echo leaked > timed-foreground) & wait"});
 	assert(!existsSync(join(cwd, "timed-foreground")));
 });
 
-test("background commands and watcher checks use Pi's shell prefix", { timeout: 20000 }, async t => {
-	const { call, updates } = await start(t, { shellCommandPrefix: "export BG_TEST_PREFIX=ready" });
+test("background commands and watcher checks use Pi's shell settings", { timeout: 20000 }, async t => {
+	const { call, updates } = await start(t, {
+		shellCommandPrefix: "export BG_TEST_PREFIX=ready", shellPath: `~/${relative(homedir(), "/bin/bash")}`,
+	});
 	const job = await call("background_process", { action: "start", command: 'printf "%s" "$BG_TEST_PREFIX"' });
 	const watcher = await call("background_watch", { action: "create", command: 'test "$BG_TEST_PREFIX" = ready && printf watched' });
 	await until(() => updates().some(event => event.id === job.id) && updates().some(event => event.id === watcher.id));

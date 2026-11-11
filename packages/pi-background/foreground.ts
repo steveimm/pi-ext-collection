@@ -43,7 +43,7 @@ export function createManagedBash(
 							}),
 						}, execution.onData);
 						const running = process;
-						const abort = () => { void manager.stopProcess(running.id); };
+						const abort = () => running.cancel();
 						if (execution.signal?.aborted) abort();
 						else execution.signal?.addEventListener("abort", abort, { once: true });
 						try {

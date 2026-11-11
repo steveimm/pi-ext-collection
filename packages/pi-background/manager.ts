@@ -48,6 +48,7 @@ export interface ForegroundProcess {
 	id: string;
 	completed: Promise<{ exitCode: number | null }>;
 	backgrounded: Promise<void>;
+	cancel(): void;
 }
 
 interface Watcher {
@@ -85,11 +86,14 @@ export interface NotificationTarget {
 	send(events: BackgroundEvent[]): void;
 }
 
+export function expandHome(path: string): string {
+	if (path === "~") return homedir();
+	if (path.startsWith("~/") || path.startsWith("~\\")) return join(homedir(), path.slice(2));
+	return path;
+}
+
 export function resolveDirectory(path: string | undefined, cwd: string): string {
-	let target = path ?? cwd;
-	if (target === "~") target = homedir();
-	else if (target.startsWith("~/") || target.startsWith("~\\")) target = join(homedir(), target.slice(2));
-	target = realpathSync(resolve(cwd, target));
+	const target = realpathSync(resolve(cwd, expandHome(path ?? cwd)));
 	if (!statSync(target).isDirectory()) throw new Error(`Not a directory: ${target}`);
 	accessSync(target, constants.R_OK | constants.X_OK);
 	return target;
@@ -181,6 +185,10 @@ export class BackgroundManager {
 		return {
 			id: job.id,
 			backgrounded,
+			cancel: () => {
+				// Ctrl+B takes effect before the caller's abort listener is removed.
+				if (!job.background) this.cancelProcess(job);
+			},
 			completed: job.done.then(() => {
 				if (job.executionError !== undefined) throw job.executionError;
 				if (job.status === "stopped") throw new Error("aborted");
@@ -270,13 +278,17 @@ export class BackgroundManager {
 	async stopProcess(id: string) {
 		const job = this.processes.get(id);
 		if (!job) throw new Error(`Unknown background process: ${id}`);
+		this.cancelProcess(job);
+		await job.done;
+		this.pending.delete(id);
+		return processInfo(job);
+	}
+
+	private cancelProcess(job: ProcessJob): void {
 		if (job.status === "running") {
 			job.status = "stopped";
 			job.controller.abort();
 		}
-		await job.done;
-		this.pending.delete(id);
-		return processInfo(job);
 	}
 
 	watch(options: WatchOptions, operations: BashOperations) {

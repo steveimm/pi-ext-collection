@@ -111,11 +111,12 @@ test("backgrounding foreground Bash releases the call and detaches its abort sig
 	await until(() => existsSync(join(cwd, "started")));
 	const id = manager.backgroundLatest();
 	assert(id);
+	signal.abort();
 	const handoff = await result;
 	assert.equal(handoff.structuredContent.background, true);
 	assert.equal(handoff.structuredContent.exit_code, null);
 	assert.equal(handoff.structuredContent.id, id);
-	signal.abort();
+	assert.equal(manager.readProcess(id).status, "running");
 	writeFileSync(join(cwd, "release"), "");
 	await until(() => events.some(event => event.id === id));
 	assert.equal(events[0].event, "completed");

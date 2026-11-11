@@ -1,9 +1,17 @@
 import { join } from "node:path";
-import { createLocalBashOperations, getAgentDir, SessionManager, type AgentToolResult, type BashOperations, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+	createLocalBashOperations,
+	getAgentDir,
+	SessionManager,
+	type AgentToolResult,
+	type BashOperations,
+	type BashToolOptions,
+	type ExtensionAPI,
+} from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { createManagedBash } from "./foreground.js";
-import { BackgroundManager, resolveDirectory, type CommandOptions } from "./manager.js";
+import { BackgroundManager, expandHome, resolveDirectory, type CommandOptions } from "./manager.js";
 
 const stateKey = Symbol.for("@steveimm/pi-background/managers");
 const shared = globalThis as typeof globalThis & { [stateKey]?: Map<string, BackgroundManager> };
@@ -63,12 +71,20 @@ export default function (pi: ExtensionAPI) {
 		return manager;
 	}
 
-	function shellOperations(): BashOperations {
+	function shellOptions(): BashToolOptions {
 		const settings = pi.getSettings();
-		const backend = createLocalBashOperations(settings.shellPath ? { shellPath: settings.shellPath } : undefined);
 		return {
-			exec: (command, cwd, options) => backend.exec(
-				settings.shellCommandPrefix ? `${settings.shellCommandPrefix}\n${command}` : command, cwd, options,
+			...(settings.shellPath === undefined ? {} : { shellPath: expandHome(settings.shellPath) }),
+			...(settings.shellCommandPrefix === undefined ? {} : { commandPrefix: settings.shellCommandPrefix }),
+		};
+	}
+
+	function shellOperations(): BashOperations {
+		const options = shellOptions();
+		const backend = createLocalBashOperations(options.shellPath ? { shellPath: options.shellPath } : undefined);
+		return {
+			exec: (command, cwd, execution) => backend.exec(
+				options.commandPrefix ? `${options.commandPrefix}\n${command}` : command, cwd, execution,
 			),
 		};
 	}
@@ -122,13 +138,7 @@ export default function (pi: ExtensionAPI) {
 		manager = undefined;
 	});
 
-	pi.registerTool(createManagedBash(current, () => {
-		const settings = pi.getSettings();
-		return {
-			...(settings.shellPath === undefined ? {} : { shellPath: settings.shellPath }),
-			...(settings.shellCommandPrefix === undefined ? {} : { commandPrefix: settings.shellCommandPrefix }),
-		};
-	}));
+	pi.registerTool(createManagedBash(current, shellOptions));
 
 	pi.registerTool({
 		name: "background_process",
