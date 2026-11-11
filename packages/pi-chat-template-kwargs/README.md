@@ -19,7 +19,7 @@ To try the local package from the repository root:
 
 ```bash
 npm ci
-pi --no-extensions -e ./packages/chat-template-kwargs
+pi --no-extensions -e ./packages/pi-chat-template-kwargs
 ```
 
 ## Usage

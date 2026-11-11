@@ -8,7 +8,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/steveimm/pi-ext-collection.git",
-    "directory": "packages/chat-template-kwargs"
+    "directory": "packages/pi-chat-template-kwargs"
   },
   "keywords": [
     "pi-package"
@@ -18,7 +18,7 @@
   "bugs": {
     "url": "https://github.com/steveimm/pi-ext-collection/issues"
   },
-  "homepage": "https://github.com/steveimm/pi-ext-collection/tree/main/packages/chat-template-kwargs#readme",
+  "homepage": "https://github.com/steveimm/pi-ext-collection/tree/main/packages/pi-chat-template-kwargs#readme",
   "pi": {
     "extensions": [
       "./index.ts"
