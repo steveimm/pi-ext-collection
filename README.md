@@ -9,6 +9,7 @@ The repository root is private and is not published.
 | Extension | npm package | Description |
 | --- | --- | --- |
 | [Chat template kwargs](packages/pi-chat-template-kwargs/README.md) | `@steveimm/pi-chat-template-kwargs` | Override `chat_template_kwargs` during a session with `/ctk`. |
+| [Change directory](packages/pi-change-dir/README.md) | `@steveimm/pi-change-dir` | Change the working directory with `/cd` while continuing the current session. |
 
 After publishing the package, install it independently:
 
@@ -20,6 +21,12 @@ pi install npm:@steveimm/pi-chat-template-kwargs
 
 ```text
 packages/
+  pi-change-dir/
+    package.json
+    tsconfig.json
+    index.ts
+    README.md
+    LICENSE
   pi-chat-template-kwargs/
     package.json
     tsconfig.json

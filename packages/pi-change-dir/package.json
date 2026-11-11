@@ -1,0 +1,41 @@
+{
+  "name": "@steveimm/pi-change-dir",
+  "version": "0.1.0",
+  "description": "Change Pi working directory with /cd while continuing the current session",
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steveimm/pi-ext-collection.git",
+    "directory": "packages/pi-change-dir"
+  },
+  "homepage": "https://github.com/steveimm/pi-ext-collection/tree/main/packages/pi-change-dir#readme",
+  "bugs": {
+    "url": "https://github.com/steveimm/pi-ext-collection/issues"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "files": [
+    "index.ts",
+    "README.md",
+    "LICENSE"
+  ]
+}
