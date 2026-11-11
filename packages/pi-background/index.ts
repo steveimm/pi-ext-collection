@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { createLocalBashOperations, getAgentDir, SessionManager, type AgentToolResult, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { matchesKey } from "@earendil-works/pi-tui";
+import { createManagedBash } from "./foreground.js";
 import { BackgroundManager, resolveDirectory, type CommandOptions } from "./manager.js";
 
 const stateKey = Symbol.for("@steveimm/pi-background/managers");
@@ -21,6 +23,7 @@ const taskOutputFields = {
 const processOutput = Type.Object({
 	...taskOutputFields,
 	status: Type.Union([Type.Literal("running"), Type.Literal("completed"), Type.Literal("failed"), Type.Literal("stopped")]),
+	background: Type.Boolean(),
 	exit_code: Type.Union([Type.Integer(), Type.Null()]), error: Type.Optional(Type.String()),
 	started_at: Type.String(), finished_at: Type.Optional(Type.String()),
 	log_path: Type.String(), log_truncated: Type.Boolean(), output: Type.Optional(Type.String()), message: Type.Optional(Type.String()),
@@ -53,6 +56,7 @@ function commandOptions(params: {
 export default function (pi: ExtensionAPI) {
 	let manager: BackgroundManager | undefined;
 	let sessionId: string | undefined;
+	let removeInputHandler: (() => void) | undefined;
 
 	function current(): BackgroundManager {
 		if (!manager) throw new Error("No active background session.");
@@ -80,11 +84,22 @@ export default function (pi: ExtensionAPI) {
 				details: { events },
 			}, { triggerTurn: true, deliverAs: "followUp" }),
 		});
+		if (ctx.mode === "tui") {
+			removeInputHandler = ctx.ui.onTerminalInput(data => {
+				if (!matchesKey(data, "ctrl+b")) return;
+				const id = manager?.backgroundLatest();
+				if (!id) return;
+				ctx.ui.notify(`Moved command to the background: ${id}`, "info");
+				return { consume: true };
+			});
+		}
 	});
 
 	pi.on("agent_settled", () => manager?.requestDelivery());
 
 	pi.on("session_shutdown", async event => {
+		removeInputHandler?.();
+		removeInputHandler = undefined;
 		if (!manager || !sessionId) return;
 		let keep = event.reason === "reload";
 		if (event.reason === "resume" && event.targetSessionFile) {
@@ -101,6 +116,14 @@ export default function (pi: ExtensionAPI) {
 		}
 		manager = undefined;
 	});
+
+	pi.registerTool(createManagedBash(current, () => {
+		const settings = pi.getSettings();
+		return {
+			...(settings.shellPath === undefined ? {} : { shellPath: settings.shellPath }),
+			...(settings.shellCommandPrefix === undefined ? {} : { commandPrefix: settings.shellCommandPrefix }),
+		};
+	}));
 
 	pi.registerTool({
 		name: "background_process",

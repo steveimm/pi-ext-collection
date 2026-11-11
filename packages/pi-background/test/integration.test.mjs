@@ -1,24 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { RpcClient } from "@earendil-works/pi-coding-agent";
+import { backgroundUpdates, until } from "./helpers.mjs";
 
 const packagePath = fileURLToPath(new URL("..", import.meta.url));
 const providerPath = fileURLToPath(new URL("fixtures/provider.js", import.meta.url));
 const cliPath = join(dirname(fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"))), "bundle/cli.js");
-
-async function until(predicate, timeout = 10000) {
-	const deadline = Date.now() + timeout;
-	while (!(await predicate())) {
-		assert(Date.now() < deadline, "Timed out waiting for the background event.");
-		await sleep(25);
-	}
-}
 
 async function start(t) {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-background-test-")));
@@ -55,8 +48,7 @@ async function start(t) {
 	}
 	return {
 		client, root, cwd, events, execute,
-		updates: () => events.filter(event => event.type === "message_end" && event.message?.customType === "pi-background")
-			.flatMap(event => event.message.details.events),
+		updates: () => backgroundUpdates(events),
 		async call(name, args) {
 			return JSON.parse((await execute(name, args)).content[0].text);
 		},

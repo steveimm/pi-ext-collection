@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { accessSync, appendFileSync, constants, mkdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, appendFileSync, constants, mkdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { BashOperations } from "@earendil-works/pi-coding-agent";
@@ -38,6 +38,16 @@ interface ProcessJob {
 	log: OutputLog;
 	controller: AbortController;
 	done: Promise<void>;
+	background: boolean;
+	onData: ((data: Buffer) => void) | undefined;
+	onBackground: (() => void) | undefined;
+	executionError: unknown;
+}
+
+export interface ForegroundProcess {
+	id: string;
+	completed: Promise<{ exitCode: number | null }>;
+	backgrounded: Promise<void>;
 }
 
 interface Watcher {
@@ -104,7 +114,7 @@ function errorMessage(error: unknown, timeout?: number): string {
 function processInfo(job: ProcessJob) {
 	return {
 		id: job.id, command: job.options.command, cwd: job.options.cwd, label: job.options.label,
-		status: job.status, exit_code: job.exitCode, error: job.error,
+		status: job.status, background: job.background, exit_code: job.exitCode, error: job.error,
 		started_at: job.startedAt, finished_at: job.finishedAt, log_path: job.log.path, log_truncated: job.log.truncated,
 	};
 }
@@ -161,16 +171,55 @@ export class BackgroundManager {
 	}
 
 	start(options: CommandOptions, operations: BashOperations) {
+		return processInfo(this.createProcess(options, operations));
+	}
+
+	startForeground(options: CommandOptions, operations: BashOperations, onData: (data: Buffer) => void): ForegroundProcess {
+		let onBackground!: () => void;
+		const backgrounded = new Promise<void>(resolve => { onBackground = resolve; });
+		const job = this.createProcess(options, operations, { onData, onBackground });
+		return {
+			id: job.id,
+			backgrounded,
+			completed: job.done.then(() => {
+				if (job.executionError !== undefined) throw job.executionError;
+				if (job.status === "stopped") throw new Error("aborted");
+				return { exitCode: job.exitCode };
+			}),
+		};
+	}
+
+	backgroundLatest(): string | undefined {
+		const job = [...this.processes.values()].reverse().find(job => job.status === "running" && !job.background);
+		if (!job) return undefined;
+		job.background = true;
+		job.onData = undefined;
+		job.onBackground?.();
+		job.onBackground = undefined;
+		return job.id;
+	}
+
+	forgetForeground(id: string): void {
+		const job = this.processes.get(id);
+		if (!job || job.background || job.status === "running") return;
+		this.processes.delete(id);
+		rmSync(job.log.path, { force: true });
+	}
+
+	private createProcess(options: CommandOptions, operations: BashOperations,
+		foreground?: { onData: (data: Buffer) => void; onBackground: () => void }): ProcessJob {
 		if (!options.command.trim()) throw new Error("Provide a non-empty command.");
 		const id = `process-${randomUUID()}`;
 		const job: ProcessJob = {
 			id, options, status: "running", exitCode: null, error: undefined,
 			startedAt: new Date().toISOString(), finishedAt: undefined, log: this.createLog(id),
 			controller: new AbortController(), done: Promise.resolve(),
+			background: foreground === undefined, onData: foreground?.onData,
+			onBackground: foreground?.onBackground, executionError: undefined,
 		};
 		this.processes.set(id, job);
 		job.done = this.runProcess(job, operations);
-		return processInfo(job);
+		return job;
 	}
 
 	private async runProcess(job: ProcessJob, operations: BashOperations): Promise<void> {
@@ -181,6 +230,7 @@ export class BackgroundManager {
 				onData: data => {
 					try {
 						appendOutput(job.log, data);
+						job.onData?.(data);
 					} catch (error) {
 						job.error = `Cannot write the log: ${errorMessage(error)}`;
 						job.controller.abort();
@@ -190,13 +240,14 @@ export class BackgroundManager {
 			job.exitCode = result.exitCode;
 			if (job.status !== "stopped") job.status = result.exitCode === 0 ? "completed" : "failed";
 		} catch (error) {
+			job.executionError = error;
 			if (job.status !== "stopped") {
 				job.status = "failed";
 				job.error ??= errorMessage(error, job.options.timeoutSeconds);
 			}
 		} finally {
 			job.finishedAt = new Date().toISOString();
-			if (job.status !== "stopped") {
+			if (job.background && job.status !== "stopped") {
 				this.queue({
 					id: job.id, kind: "process", event: job.status, command: job.options.command, cwd: job.options.cwd,
 					label: job.options.label, instruction: job.options.instruction, exit_code: job.exitCode,
@@ -207,7 +258,7 @@ export class BackgroundManager {
 	}
 
 	listProcesses() {
-		return [...this.processes.values()].map(processInfo);
+		return [...this.processes.values()].filter(job => job.background).map(processInfo);
 	}
 
 	readProcess(id: string) {

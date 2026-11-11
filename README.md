@@ -27,6 +27,7 @@ packages/
     tsconfig.json
     index.ts
     manager.ts
+    foreground.ts
     README.md
     LICENSE
   pi-change-dir/

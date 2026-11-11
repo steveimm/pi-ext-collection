@@ -41,6 +41,21 @@ The instruction is included in the completion notification so the agent knows wh
 Commands run without terminal input and have no time limit unless one is supplied.
 Do not add `&` to the command: the extension manages the background process.
 
+## Background a running Bash command
+
+Press **Ctrl+B** while the agent's Bash command is running to move it to the background.
+With tmux's default prefix, press Ctrl+B twice to send the key to Pi.
+The shortcut selects the most recently started foreground Bash command.
+When no command is running, Pi handles the key normally.
+
+This also works for Bash calls made through codemode.
+The call returns a background process ID and the command continues running.
+If the script is also waiting for other foreground commands, those calls still need to finish or be moved to the background.
+An explicitly supplied timeout continues to apply after the command is moved.
+
+The shortcut wraps Pi's local Bash tool.
+Other extensions that also replace `bash` may override this behavior, depending on their load order.
+
 ## Watchers
 
 The agent uses `background_watch` to create, list, or delete polling checks.
@@ -84,6 +99,8 @@ Once the start call returns, Pi owns the process independently of the codemode s
 The process continues if that script later returns or fails.
 Its notification goes to the Pi conversation after the current turn finishes.
 Commands that share files or ports still need to be ordered by the agent.
+If the user backgrounds a Bash call, that call returns `background: true`, `id`, and `exit_code: null`.
+Scripts should check `background` before treating the result as a completed command.
 See [Pi's codemode documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/codemode.md).
 
 ## Notifications and lifetime
@@ -105,6 +122,31 @@ Each log keeps up to 10 MiB, and the read tool also retains the most recent 16 K
 The status reports when a log has been truncated.
 
 The extension uses [Pi's shell execution and message APIs](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md).
+
+## Development
+
+From the repository root:
+
+```bash
+npm run check
+npm test --workspace=packages/pi-background
+```
+
+The default tests use a local test provider and do not make model requests.
+The optional terminal test requires tmux:
+
+```bash
+npm run test:terminal --workspace=packages/pi-background
+```
+
+The optional GPT test uses the current Pi authentication and makes model requests:
+
+```bash
+npm run test:live --workspace=packages/pi-background
+```
+
+It defaults to `openai-codex/gpt-6.1-sol`.
+Set `PI_BACKGROUND_TEST_PROVIDER` and `PI_BACKGROUND_TEST_MODEL` to select another configured GPT provider and model.
 
 ## License
 
