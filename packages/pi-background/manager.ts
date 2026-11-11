@@ -222,8 +222,8 @@ export class BackgroundManager {
 		if (job.status === "running") {
 			job.status = "stopped";
 			job.controller.abort();
-			await job.done;
 		}
+		await job.done;
 		this.pending.delete(id);
 		return processInfo(job);
 	}

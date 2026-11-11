@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "description": "Background commands and polling watchers that notify the Pi agent",
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs"
   },
   "keywords": [
     "pi-package"

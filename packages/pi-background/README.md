@@ -63,6 +63,29 @@ Checks never overlap: the interval starts after the previous check finishes.
 Timeouts and commands that cannot run generate an error notification, with repeated identical errors suppressed.
 Ordinary polling does not call the model.
 
+## Codemode
+
+Both tools return structured values to codemode scripts.
+Await each start call to obtain its ID, then let the script return:
+
+```js
+const results = await Promise.allSettled([
+  tools.background_process({
+    action: "start",
+    command: "npm test",
+    instruction: "Inspect any failures when the tests finish."
+  }),
+  tools.bash({ command: "git status --short" })
+]);
+results.forEach(text);
+```
+
+Once the start call returns, Pi owns the process independently of the codemode script.
+The process continues if that script later returns or fails.
+Its notification goes to the Pi conversation after the current turn finishes.
+Commands that share files or ports still need to be ordered by the agent.
+See [Pi's codemode documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/codemode.md).
+
 ## Notifications and lifetime
 
 Completion and failure notifications include the task ID, command, working directory, exit code, recent output, log path, and saved instruction.
