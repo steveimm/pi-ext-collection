@@ -10,6 +10,7 @@ The root npm package is private and is not published.
 | --- | --- | --- |
 | [Chat template kwargs](packages/pi-chat-template-kwargs/README.md) | `@steveimm/pi-chat-template-kwargs` | Override `chat_template_kwargs` during a session with `/ctk`. |
 | [Change directory](packages/pi-change-dir/README.md) | `@steveimm/pi-change-dir` | Change the working directory with `/cd` while continuing the current session. |
+| [Background work](packages/pi-background/README.md) | `@steveimm/pi-background` | Run background commands and polling watchers that notify the agent. |
 
 After publishing the package, install it independently:
 
@@ -21,6 +22,13 @@ pi install npm:@steveimm/pi-chat-template-kwargs
 
 ```text
 packages/
+  pi-background/
+    package.json
+    tsconfig.json
+    index.ts
+    manager.ts
+    README.md
+    LICENSE
   pi-change-dir/
     package.json
     tsconfig.json

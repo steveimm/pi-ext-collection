@@ -1,0 +1,43 @@
+{
+  "name": "@steveimm/pi-background",
+  "version": "0.1.0",
+  "description": "Background commands and polling watchers that notify the Pi agent",
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steveimm/pi-ext-collection.git",
+    "directory": "packages/pi-background"
+  },
+  "homepage": "https://github.com/steveimm/pi-ext-collection/tree/main/packages/pi-background#readme",
+  "bugs": {
+    "url": "https://github.com/steveimm/pi-ext-collection/issues"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "files": [
+    "*.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.1",
+    "typebox": "1.3.27"
+  }
+}
