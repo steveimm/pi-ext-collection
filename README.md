@@ -8,7 +8,7 @@ The repository root is private and is not published.
 
 | Extension | npm package | Description |
 | --- | --- | --- |
-| [Chat template kwargs](packages/chat-template-kwargs/README.md) | `@steveimm/pi-chat-template-kwargs` | Override `chat_template_kwargs` during a session with `/ctk`. |
+| [Chat template kwargs](packages/pi-chat-template-kwargs/README.md) | `@steveimm/pi-chat-template-kwargs` | Override `chat_template_kwargs` during a session with `/ctk`. |
 
 After publishing the package, install it independently:
 
@@ -20,7 +20,7 @@ pi install npm:@steveimm/pi-chat-template-kwargs
 
 ```text
 packages/
-  chat-template-kwargs/
+  pi-chat-template-kwargs/
     package.json
     tsconfig.json
     index.ts
@@ -47,8 +47,8 @@ npm run check
 Check or try one extension:
 
 ```bash
-npm run check --workspace=packages/chat-template-kwargs
-pi --no-extensions -e ./packages/chat-template-kwargs
+npm run check --workspace=packages/pi-chat-template-kwargs
+pi --no-extensions -e ./packages/pi-chat-template-kwargs
 ```
 
 The Pi command loads the local package for that invocation without saving an installation.
@@ -77,7 +77,7 @@ Authenticate with npm using `npm login`.
 For later releases, increment only the changed package's version:
 
 ```bash
-npm version patch --workspace=packages/chat-template-kwargs --no-git-tag-version
+npm version patch --workspace=packages/pi-chat-template-kwargs --no-git-tag-version
 ```
 
 Check the repository, inspect the selected package's contents, then publish it:
@@ -85,8 +85,8 @@ Check the repository, inspect the selected package's contents, then publish it:
 ```bash
 npm ci
 npm run check
-npm pack --workspace=packages/chat-template-kwargs --dry-run
-npm publish --workspace=packages/chat-template-kwargs --access public
+npm pack --workspace=packages/pi-chat-template-kwargs --dry-run
+npm publish --workspace=packages/pi-chat-template-kwargs --access public
 ```
 
 Publish only the workspace being released.
