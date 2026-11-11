@@ -118,8 +118,8 @@ For each package, open its settings on npmjs.com and add a GitHub Actions truste
 Create the connection when a release is ready.
 npm requires its first successful CI publication within two days of setup.
 
-A new package must be published once before npm allows trusted publishing configuration.
-For that first release, log in locally and publish the selected workspace:
+The package must exist on npm before its trusted publisher can be configured.
+For a new extension, log in locally and publish its first release:
 
 ```bash
 npm login
@@ -132,6 +132,9 @@ npm publish --workspace=packages/pi-change-dir --access public
 Then configure its trusted publisher and use GitHub Actions for later releases.
 Adding another directory under `packages/` does not require editing the workflows.
 See [npm's setup requirements](https://docs.npmjs.com/cli/commands/npm-trust/) and [GitHub's manual workflow guide](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+
+npm scans new releases before making them available to install, so a successful publish can take several minutes to appear in the registry.
+See [npm's publication processing notice](https://github.blog/changelog/2026-07-28-npm-publish-time-malware-scanning-and-dual-use-metadata/).
 
 ## License
 
