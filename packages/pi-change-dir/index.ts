@@ -64,7 +64,7 @@ export default function (pi: ExtensionAPI) {
 	let changingDirectory = false;
 
 	pi.registerCommand("cd", {
-		description: "Change directory and continue this session. Usage: /cd <path>; /cd shows the current directory.",
+		description: "Change directory and continue this session. Use /cd <path>, or /cd to show the current directory.",
 		handler: async (args, ctx) => {
 			if (!args.trim()) {
 				ctx.ui.notify(`Current directory: ${ctx.cwd}`, "info");
@@ -118,7 +118,7 @@ export default function (pi: ExtensionAPI) {
 					ctx.ui.notify("Directory change cancelled.", "info");
 				}
 			} catch (error) {
-				// Runtime creation can fail after Pi has disposed the old context; keep both files for recovery.
+				// Pi may stop the old runtime before the switch fails. Keep both files for recovery.
 				throw new Error(`Cannot finish changing directory: ${describeError(error)} Original session: ${move.source}. Destination: ${move.path}.`);
 			} finally {
 				changingDirectory = false;

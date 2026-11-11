@@ -2,7 +2,8 @@
   "name": "pi-ext-collection",
   "description": "Independently installable Pi extensions",
   "scripts": {
-    "check": "npm run check --workspaces"
+    "check": "npm run check --workspaces",
+    "test": "npm run test --workspaces --if-present"
   },
   "repository": {
     "type": "git",

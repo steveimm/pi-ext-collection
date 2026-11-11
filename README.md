@@ -2,7 +2,7 @@
 
 Independently installable [Pi](https://github.com/earendil-works/pi) extensions maintained in one npm workspace repository.
 Each directory under `packages/` has its own npm package, version, and dependencies.
-The repository root is private and is not published.
+The root npm package is private and is not published.
 
 ## Extensions
 
@@ -49,6 +49,7 @@ Install dependencies and check all extensions from the repository root:
 ```bash
 npm ci
 npm run check
+npm test
 ```
 
 Check or try one extension:

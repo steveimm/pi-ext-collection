@@ -18,7 +18,7 @@ pi -e ./packages/pi-change-dir
 ```
 
 Install globally or load with `-e` so `/cd` remains available after leaving the original project.
-A project-only installation follows Pi's project extension loading rules.
+An installation saved only in the original project's settings will not load in other projects.
 
 ## Usage
 
@@ -41,18 +41,32 @@ The extension preserves the session ID, conversation tree, active branch, name, 
 It writes the transcript into Pi's default session folder for the destination project, switches through Pi's session API, then removes the old transcript after a successful switch.
 This also applies when the original transcript was opened from a custom session directory.
 
-Pi rebuilds its runtime for the destination: tools use the new directory, project settings and instructions reload, and project extensions, skills, prompts, themes, and MCP servers follow the normal session-switch lifecycle.
-Project trust follows Pi's existing rules and command-line overrides.
-There are no separate Claude-style directory permission rules or `/add-dir` features.
-See [Pi's session replacement documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md#session-replacement-lifecycle-and-footguns).
+Pi reloads project settings, instructions, extensions, skills, prompts, and themes for the new directory.
+Tools use the new directory, and Pi reconnects project MCP servers on versions that support MCP.
+Project trust follows Pi's existing rules and command-line options.
+See [Pi's session switching documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md#ctxswitchsessionsessionpath-options).
 
-Missing paths, regular files, inaccessible directories, and destination session collisions are rejected before switching.
+Missing paths, regular files, and inaccessible directories are rejected before switching.
+An existing destination transcript is never overwritten.
 The agent must be idle with no queued messages.
-In-memory sessions started with `--no-session` cannot be moved through Pi's file-based session-switch API.
+Sessions started with `--no-session` cannot use `/cd`, because Pi can only switch to a saved session.
 
 If another extension cancels the switch, the temporary destination transcript is removed and the original session continues.
-If runtime creation fails, both transcripts are retained for recovery.
-If another extension writes to the outgoing transcript during shutdown, that file is retained with a warning instead of deleting its additional entries.
+If Pi cannot finish switching, both transcripts are kept for recovery.
+If another extension writes to the old transcript during shutdown, that file is kept with a warning so its additional entries are preserved.
+
+## Development
+
+Run the checks from the repository root:
+
+```bash
+npm run check
+npm test --workspace=packages/pi-change-dir
+```
+
+The tests launch Pi with temporary projects and configuration, without model requests.
+Set `PI_CHANGE_DIR_TEST_CLI` to another Pi installation's `dist/cli.js` to test that version.
+The MCP test runs only when that version includes MCP support.
 
 ## License
 
