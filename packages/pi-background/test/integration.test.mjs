@@ -9,20 +9,23 @@ import test from "node:test";
 import { RpcClient } from "@earendil-works/pi-coding-agent";
 import { backgroundUpdates, until } from "./helpers.mjs";
 
-const packagePath = fileURLToPath(new URL("..", import.meta.url));
+const packagePath = process.env.PI_BACKGROUND_TEST_PACKAGE ?? fileURLToPath(new URL("..", import.meta.url));
+const changeDirPath = fileURLToPath(new URL("../../pi-change-dir", import.meta.url));
 const providerPath = fileURLToPath(new URL("fixtures/provider.js", import.meta.url));
 const cliPath = join(dirname(fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"))), "bundle/cli.js");
 
-async function start(t) {
+async function start(t, settings = {}) {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-background-test-")));
 	const cwd = join(root, "project");
 	mkdirSync(cwd);
 	mkdirSync(join(root, "other"));
+	mkdirSync(join(root, "agent"));
+	writeFileSync(join(root, "agent/settings.json"), JSON.stringify(settings));
 	const client = new RpcClient({
 		cliPath, cwd, provider: "background-test", model: "test",
 		env: { PI_CODING_AGENT_DIR: join(root, "agent"), PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0" },
 		args: ["--offline", "--no-approve", "--no-extensions", "--no-mcp", "--no-skills", "--no-context-files",
-			"-e", packagePath, "-e", providerPath, "-e", join(packagePath, "../pi-change-dir"), "-e", "builtin:codemode", "--tools", "+codemode"],
+			"-e", packagePath, "-e", providerPath, "-e", changeDirPath, "-e", "builtin:codemode", "--tools", "+codemode"],
 	});
 	const events = [];
 	client.onEvent(event => events.push(event));
@@ -191,4 +194,28 @@ text("IDS:" + JSON.stringify([first.id, second.id]));
 	await until(() => updates().some(event => event.id === completed));
 	assert(!updates().some(event => event.id === stopped));
 	assert.equal((await call("background_process", { action: "read", id: completed })).output, "completed");
+});
+
+test("codemode timeout stops ordinary Bash but preserves a completed background start", { timeout: 20000 }, async t => {
+	const { cwd, execute, updates } = await start(t);
+	const response = await execute("codemode", { code: `// @options: {"timeout_ms": 3000}
+const job = await tools.background_process({action: "start", command: "sleep 4; printf survived-timeout"});
+text("ID:" + job.id);
+await tools.bash({command: "(sleep 4; echo leaked > timed-foreground) & wait"});
+` }, true);
+	const text = response.content.map(item => item.text ?? "").join("\n");
+	const id = text.match(/ID:(process-[a-f0-9-]+)/)[1];
+	await until(() => updates().some(event => event.id === id));
+	await sleep(500);
+	assert.equal(updates().find(event => event.id === id).output, "survived-timeout");
+	assert(!existsSync(join(cwd, "timed-foreground")));
+});
+
+test("background commands and watcher checks use Pi's shell prefix", { timeout: 20000 }, async t => {
+	const { call, updates } = await start(t, { shellCommandPrefix: "export BG_TEST_PREFIX=ready" });
+	const job = await call("background_process", { action: "start", command: 'printf "%s" "$BG_TEST_PREFIX"' });
+	const watcher = await call("background_watch", { action: "create", command: 'test "$BG_TEST_PREFIX" = ready && printf watched' });
+	await until(() => updates().some(event => event.id === job.id) && updates().some(event => event.id === watcher.id));
+	assert.equal(updates().find(event => event.id === job.id).output, "ready");
+	assert.equal(updates().find(event => event.id === watcher.id).output, "watched");
 });

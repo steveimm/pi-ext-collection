@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { createLocalBashOperations, getAgentDir, SessionManager, type AgentToolResult, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createLocalBashOperations, getAgentDir, SessionManager, type AgentToolResult, type BashOperations, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { createManagedBash } from "./foreground.js";
@@ -63,9 +63,14 @@ export default function (pi: ExtensionAPI) {
 		return manager;
 	}
 
-	function shellOperations() {
-		const shellPath = pi.getSettings().shellPath;
-		return createLocalBashOperations(shellPath ? { shellPath } : undefined);
+	function shellOperations(): BashOperations {
+		const settings = pi.getSettings();
+		const backend = createLocalBashOperations(settings.shellPath ? { shellPath: settings.shellPath } : undefined);
+		return {
+			exec: (command, cwd, options) => backend.exec(
+				settings.shellCommandPrefix ? `${settings.shellCommandPrefix}\n${command}` : command, cwd, options,
+			),
+		};
 	}
 
 	pi.on("session_start", (_event, ctx) => {

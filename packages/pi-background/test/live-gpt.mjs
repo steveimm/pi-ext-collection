@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir, RpcClient } from "@earendil-works/pi-coding-agent";
 import { backgroundUpdates, until } from "./helpers.mjs";
@@ -48,6 +48,7 @@ Do not wait for completion or poll the tasks. Act on completion notifications wh
 	assert(answer.some(event => event.type === "message_end" && event.message?.role === "assistant"
 		&& event.message.content.some(part => part.type === "text" && part.text.trim() === "4")));
 	console.log("GPT answered another user message while the background processes were running.");
+	for (const file of ["observed-a.txt", "observed-b.txt", "observed-watch.txt"]) assert(!existsSync(join(root, file)));
 
 	writeFileSync(join(root, "release"), "ready");
 	writeFileSync(join(root, "watch-ready"), "ready");
@@ -59,6 +60,14 @@ Do not wait for completion or poll the tasks. Act on completion notifications wh
 	const updates = backgroundUpdates(events);
 	assert.equal(updates.filter(event => event.kind === "process" && event.event === "completed").length, 2);
 	assert.equal(updates.filter(event => event.kind === "watcher" && event.event === "matched").length, 1);
+	const firstNotification = events.findIndex(event => event.type === "message_end" && event.message?.customType === "pi-background");
+	const followUpCalls = events.slice(firstNotification + 1).filter(event => event.type === "tool_execution_start");
+	for (const file of ["job-a.txt", "job-b.txt"]) {
+		assert(followUpCalls.some(event => event.toolName === "read" && basename(event.args.path) === file));
+	}
+	for (const file of ["observed-a.txt", "observed-b.txt", "observed-watch.txt"]) {
+		assert(followUpCalls.some(event => event.toolName === "write" && basename(event.args.path) === file));
+	}
 	console.log("PASS: completion notifications caused GPT to read both results and write all three follow-up files without another user prompt.");
 } finally {
 	await client.stop();
