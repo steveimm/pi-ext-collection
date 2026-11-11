@@ -17,10 +17,10 @@ export function createManagedBash(
 	const original = createBashToolDefinition(".");
 	return {
 		...original,
-		description: `${original.description} The user can press Ctrl+B to move a running command to the background. In that case the result has background: true, backgrounded_by: "user", a process id, and no exit code yet. Do not wait or repeatedly poll that process. Completion will notify you automatically.`,
+		description: `${original.description} The user can move a running command to the background. In that case the result has background: true, backgrounded_by: "user", a process id, and no exit code yet. Do not wait or repeatedly poll that process. Completion will notify you automatically.`,
 		outputSchema: Type.Union([
 			original.outputSchema!,
-			Type.Object({ background: Type.Literal(true), backgrounded_by: Type.Literal("user", { description: "The user pressed Ctrl+B." }),
+			Type.Object({ background: Type.Literal(true), backgrounded_by: Type.Literal("user"),
 				id: Type.String(), output: Type.String(),
 				log_path: Type.String(), truncated: Type.Boolean(), exit_code: Type.Null() }),
 		]),
@@ -36,7 +36,7 @@ export function createManagedBash(
 					async exec(command, cwd, execution) {
 						process = manager.startForeground({
 							command: params.command, cwd,
-							instruction: "The user pressed Ctrl+B to move this command to the background. Inspect its result and continue the original task.",
+							instruction: "The user moved this command to the background. Inspect its result and continue the original task.",
 							...(execution.timeout === undefined ? {} : { timeoutSeconds: execution.timeout }),
 						}, {
 							exec: (_command, directory, job) => backend.exec(command, directory, {
@@ -64,7 +64,7 @@ export function createManagedBash(
 				if (!(error instanceof Backgrounded)) throw error;
 				const job = manager.readProcess(error.id);
 				return {
-					content: [{ type: "text", text: `The user pressed Ctrl+B to move this command to the background as ${job.id}. You can finish this turn. Completion will notify you automatically.\nLog: ${job.log_path}` }],
+					content: [{ type: "text", text: `The user moved this command to the background as ${job.id}. You can finish this turn. Completion will notify you automatically.\nLog: ${job.log_path}` }],
 					details: undefined,
 					structuredContent: { background: true, backgrounded_by: "user", id: job.id, output: job.output, log_path: job.log_path,
 						truncated: job.output_truncated, exit_code: null },
