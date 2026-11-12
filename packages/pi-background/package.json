@@ -1,6 +1,6 @@
 {
   "name": "@steveimm/pi-background",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Background commands and polling watchers that notify the Pi agent",
   "scripts": {
     "check": "tsc --noEmit",
