@@ -28,6 +28,7 @@ pi -e ./packages/pi-queue-message
 This extension uses a small adapter for Pi's internal queues because the extension API has no operation for moving an already-pending message.
 It preserves the original message object, including image attachments.
 The adapter targets Pi 1.5.1 and reports an error if the queue structure is unsupported.
+Verified in regular and fullscreen modes, including both load orders with `pi-background`.
 
 ## License
 

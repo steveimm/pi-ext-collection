@@ -1,6 +1,6 @@
 import { AgentSession, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { matchesKey, Text, type TUI } from "@earendil-works/pi-tui";
-import { moveNewestPending } from "./queue.js";
+import { hasPending, moveNewestPending } from "./queue.js";
 
 export default function (pi: ExtensionAPI) {
 	let cleanup: (() => void) | undefined;
@@ -15,15 +15,20 @@ export default function (pi: ExtensionAPI) {
 		const original = AgentSession.prototype.getSteeringMessages;
 
 		function update() {
-			if (!disabled && session?.getSteeringMessages().length) {
-				ctx.ui.setWidget("pi-queue-message", (ui, theme) => {
-					tui = ui;
-					return new Text(theme.style("tab", { fg: "text", bold: true }) + theme.fg("dim", " queue newest message"), 0, 0);
-				});
-			} else {
-				tui = undefined;
-				ctx.ui.setWidget("pi-queue-message", undefined);
+			try {
+				if (!disabled && session && hasPending(session)) {
+					ctx.ui.setWidget("pi-queue-message", (ui, theme) => {
+						tui = ui;
+						return new Text(theme.style("tab", { fg: "text", bold: true }) + theme.fg("dim", " queue newest message"), 0, 0);
+					});
+					return;
+				}
+			} catch (error) {
+				disabled = true;
+				ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 			}
+			tui = undefined;
+			ctx.ui.setWidget("pi-queue-message", undefined);
 		}
 
 		function restore() {

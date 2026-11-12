@@ -25,6 +25,10 @@ function queueState(session: AgentSession): QueueState {
 	return state;
 }
 
+export function hasPending(session: AgentSession): boolean {
+	return queueState(session)._steeringMessages.length > 0;
+}
+
 export function moveNewestPending(session: AgentSession): boolean {
 	const state = queueState(session);
 	const text = state._steeringMessages.at(-1);
