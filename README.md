@@ -103,27 +103,47 @@ See the [Pi package documentation](https://github.com/earendil-works/pi/blob/mai
 ## Publish an extension
 
 Use the **Publish npm package** workflow in [GitHub Actions](https://github.com/steveimm/pi-ext-collection/actions/workflows/publish.yml).
-It publishes one extension from `main`, using the version already committed in its `package.json`.
+It publishes one extension from `main`, with an optional version bump.
 Other packages keep their own versions and release schedules.
 
-For an update, increment the selected package's version:
+On GitHub, open **Actions → Publish npm package → Run workflow**:
+
+1. Choose the `main` branch.
+2. Enter the directory name, such as `pi-chat-template-kwargs` or `pi-change-dir`, without `packages/` or the npm scope.
+3. Choose **Version bump**:
+
+   | Choice | Example from `1.2.3` |
+   | --- | --- |
+   | `none` | Keep `1.2.3`. Use this when the version was already bumped manually. |
+   | `patch` | Publish `1.2.4`. |
+   | `minor` | Publish `1.3.0`. |
+   | `major` | Publish `2.0.0`. |
+
+4. Leave **Check the package without publishing** selected for a preview, or clear it to publish.
+
+The workflow prepares the selected version, runs type checks and tests, and lists the package contents.
+The run summary shows the old and new versions.
+Preview runs apply the bump only in the runner's checkout and do not commit, push, or publish.
+
+For a real release with a bump, GitHub Actions commits the selected package's `package.json` and the root lockfile, then pushes to `main` before publishing to npm.
+GitHub Actions must be allowed to push to `main`.
+Publishing runs are serialized because they share the root lockfile.
+If `main` advances before the version commit is pushed, the push fails and publishing stops.
+Start a new run from the current `main` in that case.
+
+If npm publishing fails after the bump was pushed, resolve the error and start a new run with `none` to retry the still-unpublished version.
+Versions must be stable releases, such as `0.1.1`.
+npm rejects versions that have already been published.
+The **CI** workflow also runs checks on pull requests and pushes to `main`.
+
+You can still bump a version locally, commit the manifest and lockfile, and select `none` in the workflow:
 
 ```bash
 npm version patch --workspace=packages/pi-chat-template-kwargs --no-git-tag-version
 ```
 
-Commit the package manifest and root lockfile, then push to `main`.
-On GitHub, open **Actions → Publish npm package → Run workflow**:
-
-1. Choose the `main` branch.
-2. Enter the directory name, such as `pi-chat-template-kwargs` or `pi-change-dir`, without `packages/` or the npm scope.
-3. Leave **Check the package without publishing** selected to inspect a preview run.
-4. Clear that checkbox when ready to publish.
-
-The workflow installs dependencies, runs type checks and tests, and lists the package contents before publishing.
-Versions must be stable releases, such as `0.1.1`.
-npm rejects versions that have already been published.
-The **CI** workflow also runs checks on pull requests and pushes to `main`.
+Run the release preparation and Git push tests locally with `npm run test:release`.
+These tests use temporary repositories and do not publish to npm.
 
 ### Set up each npm package
 
