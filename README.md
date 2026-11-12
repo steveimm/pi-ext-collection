@@ -28,6 +28,7 @@ packages/
     tsconfig.json
     index.ts
     queue.ts
+    test/
     README.md
     LICENSE
   pi-background/
@@ -56,9 +57,11 @@ packages/
 package.json
 package-lock.json
 tsconfig.base.json
+test/
 ```
 
 Shared development tools and compiler settings live at the root.
+Shared test helpers live under `test/`.
 Each extension declares its Pi entry points, runtime dependencies, host-provided peer dependencies, and published files in its own `package.json`.
 Pi loads the TypeScript entry points directly, so no build step is needed.
 
