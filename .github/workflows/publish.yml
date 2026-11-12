@@ -5,9 +5,14 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: 'Directory under packages, such as pi-change-dir'
-        type: string
+        description: 'Package to publish'
+        type: choice
         required: true
+        options:
+          - pi-background
+          - pi-change-dir
+          - pi-chat-template-kwargs
+          - pi-queue-message
       version_bump:
         description: 'Version bump (none keeps the current package.json version)'
         type: choice

@@ -94,7 +94,8 @@ Keep one root lockfile and use npm to update it when dependencies change.
 5. Add a `tsconfig.json` extending `../../tsconfig.base.json` with `"include": ["**/*.ts"]`, and a `check` script running `tsc --noEmit`.
 6. Declare imported Pi packages as `peerDependencies` with `"*"` and as `devDependencies` for local type checking, following the existing extension.
 7. Add third-party runtime dependencies to that workspace with `npm install <dependency> --workspace=packages/<extension-name>`.
-8. Set the repository URL and `repository.directory`, add the extension to the table above, and run `npm install` and `npm run check` from the root.
+8. Set the repository URL and `repository.directory`, and add the extension to the table above and the package dropdown in `.github/workflows/publish.yml`.
+9. Run `npm install` and `npm run check` from the root.
 
 Keep extensions self-contained, without relative imports into sibling packages.
 If an extension gains more source files or assets, update its `files` allowlist.
@@ -109,7 +110,7 @@ Other packages keep their own versions and release schedules.
 On GitHub, open **Actions → Publish npm package → Run workflow**:
 
 1. Choose the `main` branch.
-2. Enter the directory name, such as `pi-chat-template-kwargs` or `pi-change-dir`, without `packages/` or the npm scope.
+2. Select the extension from **Package to publish**.
 3. Choose **Version bump**:
 
    | Choice | Example from `1.2.3` |
@@ -173,7 +174,7 @@ npm publish --workspace=packages/pi-change-dir --access public
 ```
 
 Then configure its trusted publisher and use GitHub Actions for later releases.
-Adding another directory under `packages/` does not require editing the workflows.
+Add each new package's directory name to the `package` choices in `.github/workflows/publish.yml`.
 See [npm's setup requirements](https://docs.npmjs.com/cli/commands/npm-trust/) and [GitHub's manual workflow guide](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
 
 npm scans new releases before making them available to install, so a successful publish can take several minutes to appear in the registry.
