@@ -61,7 +61,7 @@ export async function showBackgroundTasks(manager: BackgroundManager, ctx: Exten
 			const actions = tasks.length && !busy
 				? `${keys.getKeys("tui.select.up").join("/")}/${keys.getKeys("tui.select.down").join("/")} select | x kill selected task | `
 				: "";
-			hint.setText(theme.fg("dim", `${actions}escape close`));
+			hint.setText(theme.fg("dim", `${actions}esc close`));
 			feedback.setText(message);
 			tui.requestRender();
 		}
