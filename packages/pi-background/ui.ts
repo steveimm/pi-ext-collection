@@ -1,5 +1,5 @@
 import { getSelectListTheme, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { SelectList, Text } from "@earendil-works/pi-tui";
+import { matchesKey, SelectList, Text } from "@earendil-works/pi-tui";
 import type { BackgroundManager } from "./manager.js";
 
 export function activeTasks(manager: BackgroundManager) {
@@ -12,7 +12,7 @@ export function activeTasks(manager: BackgroundManager) {
 export function counts(tasks: ReturnType<typeof activeTasks>): string {
 	const processes = tasks.filter(task => task.kind === "process").length;
 	const watchers = tasks.length - processes;
-	return `${processes} ${processes === 1 ? "process" : "processes"}, ${watchers} ${watchers === 1 ? "watcher" : "watchers"}`;
+	return `${processes} background ${processes === 1 ? "process" : "processes"}, ${watchers} ${watchers === 1 ? "watcher" : "watchers"}`;
 }
 
 export async function showBackgroundTasks(manager: BackgroundManager, ctx: ExtensionContext): Promise<void> {
@@ -51,18 +51,17 @@ export async function showBackgroundTasks(manager: BackgroundManager, ctx: Exten
 		function refresh() {
 			const selected = list?.getSelectedItem()?.value;
 			tasks = activeTasks(manager);
-			title.setText(theme.fg("accent", `Background tasks: ${counts(tasks)}`));
+			title.setText(theme.fg("accent", counts(tasks)));
 			list = new SelectList(tasks.map(task => {
 				const name = task.label || task.command || (task.kind === "watcher" ? task.instruction : "") || task.id;
 				const kind = task.kind === "process" ? "Process" : `Watcher (${task.mode})`;
 				return { value: task.id, label: `${kind}: ${name.replace(/\s+/g, " ")}` };
 			}), 8, getSelectListTheme());
 			list.setSelectedIndex(Math.max(0, tasks.findIndex(task => task.id === selected)));
-			list.onSelect = item => { void stop(item.value); };
 			const actions = tasks.length && !busy
-				? `${keys.getKeys("tui.select.up").join("/")}/${keys.getKeys("tui.select.down").join("/")} select | ${keys.getKeys("tui.select.confirm").join("/")} stop selected task | `
+				? `${keys.getKeys("tui.select.up").join("/")}/${keys.getKeys("tui.select.down").join("/")} select | x kill selected task | `
 				: "";
-			hint.setText(theme.fg("dim", `${actions}${keys.getKeys("tui.select.cancel").join("/")} close`));
+			hint.setText(theme.fg("dim", `${actions}escape close`));
 			feedback.setText(message);
 			tui.requestRender();
 		}
@@ -80,8 +79,11 @@ export async function showBackgroundTasks(manager: BackgroundManager, ctx: Exten
 				];
 			},
 			handleInput(data: string) {
-				if (keys.matches(data, "tui.select.cancel")) done();
-				else if (!busy) list.handleInput(data);
+				if (matchesKey(data, "escape")) done();
+				else if (!busy && matchesKey(data, "x")) {
+					const selected = list.getSelectedItem();
+					if (selected) void stop(selected.value);
+				} else if (!busy) list.handleInput(data);
 				tui.requestRender();
 			},
 			invalidate() { title.invalidate(); list.invalidate(); hint.invalidate(); feedback.invalidate(); },

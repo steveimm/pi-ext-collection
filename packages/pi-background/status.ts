@@ -55,9 +55,7 @@ export function attachBackgroundStatus(manager: BackgroundManager, ctx: Extensio
 			render(width: number) {
 				const lines = footer.render(width);
 				if (tasks.length && lines[1] !== undefined) {
-					const processes = tasks.filter(task => task.kind === "process").length;
-					const label = width >= 80 ? `BG: ${counts(tasks)}` : `BG ${processes}p ${tasks.length - processes}w`;
-					const text = ctx.ui.theme.fg("accent", truncateToWidth(label, width));
+					const text = ctx.ui.theme.fg("accent", truncateToWidth(counts(tasks), width));
 					lines[1] = centerStatus(lines[1], this.focused ? ctx.ui.theme.inverse(text) : text, width);
 				}
 				return lines;
