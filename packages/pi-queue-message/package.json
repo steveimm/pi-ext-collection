@@ -1,7 +1,7 @@
 {
   "name": "@steveimm/pi-queue-message",
   "version": "0.1.0",
-  "description": "Move the newest pending Pi message to the follow-up queue with Tab",
+  "description": "Toggle queued Pi messages between steering and follow-up with Tab",
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "1.5.1",
     "@earendil-works/pi-tui": "1.5.1"

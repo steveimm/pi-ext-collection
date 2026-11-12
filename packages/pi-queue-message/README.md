@@ -1,20 +1,33 @@
 # @steveimm/pi-queue-message
 
-Move the newest pending message to Pi's follow-up queue with **Tab**.
-It waits until the agent finishes its current work and final response.
+Send messages with Enter and use Tab to switch all unsent messages between steering and follow-up.
 
 ## Usage
 
-1. Send a message while Pi is working. Pi lists it as a steering message.
-2. With the editor empty, press **Tab** to queue that message after the current response.
-3. If several messages are pending, each press moves the newest remaining one.
+| Key | Behavior |
+| --- | --- |
+| **Enter** | Submit the draft. While Pi is working, it joins the current queue mode. An empty queue defaults to steering. |
+| **Tab**, with empty input | Switch all unsent user messages between steering and follow-up, keeping their order. |
+| **Alt+Up** | Use Pi's native edit-all action to return unsent text to the input, preserving the current draft. |
 
-The message appears in Pi's existing follow-up list.
-Tab keeps its usual behavior when there is no pending message, while editing a draft, or in an autocomplete menu.
-Pi's existing follow-up shortcut also continues to work.
+New messages inherit the queue's mode until it empties.
+Once the queued messages are delivered or restored to the input, the mode resets to steering.
+Tab keeps normal autocomplete behavior while editing text or using an autocomplete menu.
 
 Steering messages are delivered after the current assistant response's tool calls finish, before the next model request.
-Follow-ups wait until there are no more tool calls or steering messages to process.
+Follow-ups wait until the agent has no more tool calls or steering messages to process.
+Toggling preserves message objects and image attachments, and leaves background notifications in their existing queues.
+Messages already being delivered are not moved.
+
+The hints appear inside Pi's pending-message block:
+
+- **tab** follow-up all, when the queue is steering.
+- **tab** steer all, when the queue is follow-up.
+- **alt+up** edit all unsent messages.
+
+The edit-all hint uses your configured Pi shortcut, with `alt` wording on every platform.
+Pi defaults to Alt+Up on macOS/Linux and Alt+Q on Windows.
+This extension keeps Pi's native edit-all behavior and does not register an `/unqueue` command.
 
 ## Development
 
@@ -25,9 +38,8 @@ npm run check --workspace=packages/pi-queue-message
 pi -e ./packages/pi-queue-message
 ```
 
-This extension uses a small adapter for Pi's internal queues because the extension API has no operation for moving an already-pending message.
-It preserves the original message object, including image attachments.
-The adapter targets Pi 1.5.1 and reports an error if the queue structure is unsupported.
+The extension adapts Pi's internal queue methods and pending-message renderer because the extension API does not expose these operations.
+It targets Pi 1.5.1 and disables its changes if the required structure is unsupported.
 Verified in regular and fullscreen modes, including both load orders with `pi-background`.
 
 ## License
