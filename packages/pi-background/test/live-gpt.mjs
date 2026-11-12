@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileS
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getAgentDir, RpcClient } from "@earendil-works/pi-coding-agent";
+import { RpcClient } from "@earendil-works/pi-coding-agent";
 import { backgroundUpdates, until } from "./helpers.mjs";
 
 const provider = process.env.PI_BACKGROUND_TEST_PROVIDER ?? "openai-codex";
@@ -16,17 +16,15 @@ const client = new RpcClient({
 	env: { PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0" },
 	args: ["--offline", "--no-approve", "--no-extensions", "--no-mcp", "--no-skills", "--no-context-files",
 		"--no-prompt-templates", "--no-themes", "--thinking", "low", "--session-dir", join(root, "sessions"),
-		"--tools", "background_process,background_watch,read,write,codemode", "-e", packagePath, "-e", "builtin:codemode"],
+		"--tools", "bg_process,bg_watch,read,write,codemode", "-e", packagePath, "-e", "builtin:codemode"],
 });
 const events = [];
 client.onEvent(event => events.push(event));
-let sessionId;
 
 try {
 	await client.start();
-	sessionId = (await client.getState()).sessionId;
 	const prompt = `This is a background-tool integration test in a temporary directory.
-Use codemode to start two background_process commands in parallel with Promise.allSettled, and create one background_watch.
+Use codemode to start two bg_process commands in parallel with Promise.allSettled, and create one bg_watch.
 Process A command: while [ ! -f release ]; do sleep 0.2; done; printf alpha > job-a.txt; printf alpha
 Process A instruction: After completion, read job-a.txt and use write to create observed-a.txt containing exactly alpha.
 Process B command: while [ ! -f release ]; do sleep 0.2; done; printf beta > job-b.txt; printf beta
@@ -38,9 +36,11 @@ The test runner creates release and watch-ready later. Do not create those files
 Await the start/create calls to get their IDs, then let codemode finish and reply LAUNCHED.
 Do not wait for completion or poll the tasks. Act on completion notifications when they arrive.`;
 	await client.promptAndWait(prompt, undefined, 120000);
-	const started = events.filter(event => event.type === "tool_execution_end" && event.toolName === "background_process")
+	const started = events.filter(event => event.type === "tool_execution_end" && event.toolName === "bg_process")
 		.map(event => event.result?.structuredContent).filter(result => result?.status === "running");
 	assert.equal(started.length, 2, "GPT did not start both background processes.");
+	const sessionFile = (await client.getState()).sessionFile;
+	assert(started.every(job => dirname(job.log_path) === `${sessionFile}.bg`));
 	assert(!events.some(event => event.type === "message_end" && event.message?.customType === "pi-background"));
 	console.log(`${provider}/${model}: launched two processes and a watcher, then finished its reply.`);
 
@@ -71,6 +71,5 @@ Do not wait for completion or poll the tasks. Act on completion notifications wh
 	console.log("PASS: completion notifications caused GPT to read both results and write all three follow-up files without another user prompt.");
 } finally {
 	await client.stop();
-	if (sessionId) rmSync(join(getAgentDir(), "background", `session-${encodeURIComponent(sessionId)}`), { recursive: true, force: true });
 	rmSync(root, { recursive: true, force: true });
 }
