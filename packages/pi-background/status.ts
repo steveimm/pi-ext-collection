@@ -1,7 +1,7 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { sliceByColumn, stripTerminalSequences, truncateToWidth, visibleWidth, type Component, type Editor } from "@earendil-works/pi-tui";
+import type { CustomEditor, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { sliceByColumn, stripTerminalSequences, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 import type { BackgroundManager } from "./manager.js";
-import { activeTasks, counts } from "./ui.js";
+import { activeTasks, counts, showBackgroundTasks } from "./ui.js";
 
 function findFooter(components: Component[]): Component | undefined {
 	for (const component of components) {
@@ -31,41 +31,112 @@ function centerStatus(line: string, status: string, width: number): string {
 export function attachBackgroundStatus(manager: BackgroundManager, ctx: ExtensionContext): () => void {
 	const previousFactory = ctx.ui.getEditorComponent();
 	let cleanup = () => {};
-	const factory: NonNullable<ReturnType<typeof ctx.ui.getEditorComponent>> = (tui) => {
+	const factory: NonNullable<ReturnType<typeof ctx.ui.getEditorComponent>> = (tui, _theme, keys) => {
 		if (!("getFocusedComponent" in tui) || typeof tui.getFocusedComponent !== "function") {
 			throw new Error("Cannot access Pi's editor for background task navigation.");
 		}
-		const editor = tui.getFocusedComponent() as Editor | null;
+		const editor = tui.getFocusedComponent() as CustomEditor | null;
 		const footer = findFooter(tui.children);
-		if (!editor || typeof editor.getCursor !== "function" || !footer) {
+		if (!editor || typeof editor.getCursor !== "function" || typeof editor.isShowingAutocomplete !== "function" || !footer) {
 			throw new Error("Background task navigation requires Pi's standard editor and footer.");
 		}
 		let tasks = activeTasks(manager);
 		let footerDisposed = false;
+		let dialogOpen = false;
+		const originalInput = editor.handleInput;
 		const unsubscribe = manager.subscribe(() => {
 			tasks = activeTasks(manager);
+			if (!tasks.length && status.focused) tui.setFocus(input);
 			tui.requestRender();
 		});
 		// Render Pi's existing footer to preserve its token, model, and session information.
-		ctx.ui.setFooter(() => ({
-			render(width) {
+		const status = {
+			focused: false,
+			render(width: number) {
 				const lines = footer.render(width);
 				if (tasks.length && lines[1] !== undefined) {
 					const processes = tasks.filter(task => task.kind === "process").length;
 					const label = width >= 80 ? `BG: ${counts(tasks)}` : `BG ${processes}p ${tasks.length - processes}w`;
-					lines[1] = centerStatus(lines[1], ctx.ui.theme.fg("accent", truncateToWidth(label, width)), width);
+					const text = ctx.ui.theme.fg("accent", truncateToWidth(label, width));
+					lines[1] = centerStatus(lines[1], this.focused ? ctx.ui.theme.inverse(text) : text, width);
 				}
 				return lines;
 			},
+			handleInput(data: string) {
+				if (keys.matches(data, "tui.editor.cursorDown")) return;
+				tui.setFocus(input);
+				if (keys.matches(data, "tui.input.submit")) {
+					dialogOpen = true;
+					void showBackgroundTasks(manager, ctx).catch(error => {
+						ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
+					}).finally(() => { dialogOpen = false; tui.requestRender(); });
+				} else if (!keys.matches(data, "tui.editor.cursorUp") && !keys.matches(data, "tui.select.cancel")) {
+					input.handleInput(data);
+				}
+				tui.requestRender();
+			},
 			invalidate() { footer.invalidate(); },
-			dispose() { footerDisposed = true; unsubscribe(); },
-		}));
+			dispose() {
+				footerDisposed = true;
+				unsubscribe();
+				if (this.focused) tui.setFocus(input);
+			},
+		};
+		const handleInput = (data: string) => {
+			if (dialogOpen && !footerDisposed) return;
+			if (footerDisposed || !tasks.length || !keys.matches(data, "tui.editor.cursorDown") || editor.isShowingAutocomplete()) {
+				originalInput.call(editor, data);
+				return;
+			}
+			const before = editor.getCursor();
+			const text = editor.getText();
+			const onChange = editor.onChange;
+			let changed = false;
+			editor.onChange = value => { changed = true; onChange?.(value); };
+			try {
+				originalInput.call(editor, data);
+			} finally {
+				if (onChange) editor.onChange = onChange;
+				else delete editor.onChange;
+			}
+			const after = editor.getCursor();
+			if (!changed && text === editor.getText() && before.line === after.line && before.col === after.col) {
+				tui.setFocus(status);
+				tui.requestRender();
+			}
+		};
+		const input = {
+			get focused() { return editor.focused; },
+			set focused(value: boolean) { editor.focused = value; },
+			get capturesViewportInput() { return editor.capturesViewportInput; },
+			get borderColor() { return editor.borderColor; },
+			set borderColor(value: typeof editor.borderColor) { editor.borderColor = value; },
+			get embedWorkingStatus() { return editor.embedWorkingStatus; },
+			setWorkingStatusIndicator: editor.setWorkingStatusIndicator?.bind(editor),
+			render: editor.render.bind(editor), invalidate: editor.invalidate.bind(editor), handleInput,
+			handleMouse: editor.handleMouse.bind(editor),
+			getText: editor.getText.bind(editor), setText: editor.setText.bind(editor),
+			getExpandedText: editor.getExpandedText.bind(editor), addToHistory: editor.addToHistory.bind(editor),
+			insertTextAtCursor: editor.insertTextAtCursor.bind(editor),
+			setAutocompleteProvider: editor.setAutocompleteProvider.bind(editor),
+			setPaddingX: editor.setPaddingX.bind(editor), setAutocompleteMaxVisible: editor.setAutocompleteMaxVisible.bind(editor),
+		};
+		// Forward editor callbacks without triggering CustomEditor's app-handler rewiring.
+		for (const key of ["onSubmit", "onChange"] as const) {
+			Object.defineProperty(input, key, {
+				get: () => editor[key],
+				set: (value: (text: string) => void) => { editor[key] = value; },
+			});
+		}
+		ctx.ui.setFooter(() => status);
 		cleanup = () => {
 			unsubscribe();
 			if (!footerDisposed) ctx.ui.setFooter(undefined);
 		};
-		return editor;
+		return input;
 	};
+	// /reload focuses a loading panel before session_start runs.
+	ctx.ui.setEditorComponent(previousFactory);
 	ctx.ui.setEditorComponent(factory);
 	return () => {
 		cleanup();
