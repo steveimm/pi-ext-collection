@@ -7,7 +7,9 @@
     "@earendil-works/pi-tui": "1.5.1"
   },
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "test:terminal": "node test/terminal.mjs"
   },
   "keywords": [
     "pi-package"
