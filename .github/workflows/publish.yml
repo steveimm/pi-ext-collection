@@ -1,5 +1,5 @@
 name: Publish npm package
-run-name: ${{ inputs.dry_run && 'Preview' || 'Publish' }} ${{ inputs.package }}
+run-name: ${{ inputs.dry_run && 'Preview' || 'Publish' }} ${{ inputs.package }} (${{ inputs.version_bump }})
 
 on:
   workflow_dispatch:
@@ -8,6 +8,16 @@ on:
         description: 'Directory under packages, such as pi-change-dir'
         type: string
         required: true
+      version_bump:
+        description: 'Version bump (none keeps the current package.json version)'
+        type: choice
+        required: true
+        default: none
+        options:
+          - none
+          - patch
+          - minor
+          - major
       dry_run:
         description: 'Check the package without publishing'
         type: boolean
@@ -17,20 +27,21 @@ permissions:
   contents: read
 
 concurrency:
-  group: npm-publish-${{ inputs.package }}
+  group: npm-publish
   cancel-in-progress: false
+  queue: max
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
+          persist-credentials: true
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
@@ -40,14 +51,33 @@ jobs:
         id: package
         env:
           PACKAGE: ${{ inputs.package }}
+          VERSION_BUMP: ${{ inputs.version_bump }}
         run: node .github/scripts/validate-publish.mjs
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Prepare version
+        id: release
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION_BUMP: ${{ inputs.version_bump }}
+        run: node .github/scripts/prepare-publish.mjs
       - run: npm run check
       - run: npm test
       - name: Preview package contents
         env:
           WORKSPACE: ${{ steps.package.outputs.workspace }}
         run: npm pack --workspace="$WORKSPACE" --dry-run
+      - name: Commit and push version bump
+        if: ${{ !inputs.dry_run && steps.release.outputs.bumped == 'true' }}
+        env:
+          WORKSPACE: ${{ steps.package.outputs.workspace }}
+          PACKAGE_NAME: ${{ steps.release.outputs.name }}
+          PACKAGE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$WORKSPACE/package.json" package-lock.json
+          git commit -m "chore: release $PACKAGE_NAME@$PACKAGE_VERSION"
+          git push origin HEAD:main
       - name: Publish to npm
         if: ${{ !inputs.dry_run }}
         env:

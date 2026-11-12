@@ -3,7 +3,8 @@
   "description": "Independently installable Pi extensions",
   "scripts": {
     "check": "npm run check --workspaces",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test:release && npm run test --workspaces --if-present",
+    "test:release": "node --test .github/scripts/test/*.test.mjs"
   },
   "repository": {
     "type": "git",
@@ -17,7 +18,8 @@
   "homepage": "https://github.com/steveimm/pi-ext-collection#readme",
   "devDependencies": {
     "@types/node": "^24.19.2",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "yaml": "2.9.0"
   },
   "private": true,
   "workspaces": [
