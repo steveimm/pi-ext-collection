@@ -1,13 +1,11 @@
-import { InteractiveMode, type AgentSession, type ExtensionAPI, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
-import { matchesKey, TruncatedText, type Container, type EditorComponent, type TUI } from "@earendil-works/pi-tui";
+import { InteractiveMode, type AgentSession, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { matchesKey, Text, type EditorComponent, type TUI } from "@earendil-works/pi-tui";
 import { createMessageQueue, type CompactionMessage, type DeliveryMode } from "./queue.js";
 
 interface PendingDisplay {
 	session: AgentSession;
 	ui: TUI;
 	editor: EditorComponent;
-	keybindings: KeybindingsManager;
-	pendingMessagesContainer: Container;
 	compactionQueuedMessages: CompactionMessage[];
 	getAllQueuedMessages(): { steering: readonly string[]; followUp: readonly string[] };
 	queueCompactionMessage(text: string, mode: DeliveryMode): void;
@@ -41,16 +39,15 @@ export default function (pi: ExtensionAPI) {
 			disabled = true;
 			queue?.dispose();
 			restoreCompaction?.();
+			ctx.ui.setWidget("pi-queue-message", undefined);
 			ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 		}
 
 		function attach(display: PendingDisplay) {
 			if (view) return;
 			if (!Array.isArray(display.compactionQueuedMessages)
-				|| !Array.isArray(display.pendingMessagesContainer?.children)
 				|| typeof display.getAllQueuedMessages !== "function"
-				|| typeof display.queueCompactionMessage !== "function"
-				|| typeof display.keybindings?.getKeys !== "function") {
+				|| typeof display.queueCompactionMessage !== "function") {
 				throw new Error("pi-queue-message does not support this Pi pending-message display.");
 			}
 			const controller = createMessageQueue(display.session, () => display.compactionQueuedMessages);
@@ -62,8 +59,7 @@ export default function (pi: ExtensionAPI) {
 			view = display;
 		}
 
-		// Extend the native pending-message block, including its edit-all hint.
-		function renderPending(this: PendingDisplay) {
+		function updatePending(this: PendingDisplay) {
 			const active = !stopped && !disabled && this.session.sessionManager.getSessionId() === ctx.sessionManager.getSessionId();
 			if (active) {
 				try { attach(this); } catch (error) { disable(error); }
@@ -71,27 +67,26 @@ export default function (pi: ExtensionAPI) {
 			original.call(this);
 			if (!active || disabled || !queue) return;
 			const pending = this.getAllQueuedMessages();
-			if (pending.steering.length + pending.followUp.length === 0) return;
+			if (pending.steering.length + pending.followUp.length === 0) {
+				ctx.ui.setWidget("pi-queue-message", undefined);
+				return;
+			}
 			const display = this;
-			this.pendingMessagesContainer.children.pop();
-			this.pendingMessagesContainer.addChild({
-				render(width) {
-					const theme = ctx.ui.theme;
-					const hint = (key: string, action: string) => new TruncatedText(
-						theme.fg("dim", "↳ ") + theme.style(key, { fg: "text", bold: true }) + theme.fg("dim", ` ${action}`), 1, 0,
-					).render(width);
-					const lines: string[] = [];
-					if (!stopped && !disabled && queue?.canToggle && editorReady(display)) {
-						lines.push(...hint("tab", queue.mode === "steer" ? "follow-up all" : "steer all"));
-					}
-					const editKeys = display.keybindings.getKeys("app.message.dequeue").join("/");
-					if (editKeys) lines.push(...hint(editKeys, "edit all unsent messages"));
-					return lines;
-				},
-				invalidate() {},
-			});
+			ctx.ui.setWidget("pi-queue-message", (_ui, theme) => {
+				const hint = new Text(
+					theme.style("tab", { fg: "text", bold: true }) + theme.fg("dim", " toggle steering or follow up"),
+					0,
+					0,
+				);
+				return {
+					render(width: number) {
+						return !stopped && !disabled && queue?.canToggle && editorReady(display) ? hint.render(width) : [];
+					},
+					invalidate() { hint.invalidate(); },
+				};
+			}, { placement: "aboveEditor" });
 		}
-		prototype.updatePendingMessagesDisplay = renderPending;
+		prototype.updatePendingMessagesDisplay = updatePending;
 
 		const removeInput = ctx.ui.onTerminalInput(data => {
 			if (!matchesKey(data, "tab") || stopped || disabled || !view || !queue || !editorReady(view)) return;
@@ -109,7 +104,8 @@ export default function (pi: ExtensionAPI) {
 			removeInput();
 			queue?.dispose();
 			restoreCompaction?.();
-			if (prototype.updatePendingMessagesDisplay === renderPending) prototype.updatePendingMessagesDisplay = original;
+			ctx.ui.setWidget("pi-queue-message", undefined);
+			if (prototype.updatePendingMessagesDisplay === updatePending) prototype.updatePendingMessagesDisplay = original;
 			if (view) { view.updatePendingMessagesDisplay(); view.ui.requestRender(); }
 		};
 	});
