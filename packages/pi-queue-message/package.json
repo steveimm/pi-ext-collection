@@ -1,0 +1,43 @@
+{
+  "name": "@steveimm/pi-queue-message",
+  "version": "0.1.0",
+  "description": "Move the newest pending Pi message to the follow-up queue with Tab",
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.1",
+    "@earendil-works/pi-tui": "1.5.1"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steveimm/pi-ext-collection.git",
+    "directory": "packages/pi-queue-message"
+  },
+  "homepage": "https://github.com/steveimm/pi-ext-collection/tree/main/packages/pi-queue-message#readme",
+  "bugs": {
+    "url": "https://github.com/steveimm/pi-ext-collection/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "files": [
+    "*.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  }
+}
