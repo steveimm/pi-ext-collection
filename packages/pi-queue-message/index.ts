@@ -1,13 +1,13 @@
 import { AgentSession, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { matchesKey, Text, type TUI } from "@earendil-works/pi-tui";
-import { hasPending, moveNewestPending } from "./queue.js";
+import { hasPending, hasQueued, moveNewestPending, unqueueNewest } from "./queue.js";
 
 export default function (pi: ExtensionAPI) {
 	let cleanup: (() => void) | undefined;
+	let session: AgentSession | undefined;
 
 	pi.on("session_start", (_event, ctx) => {
 		if (ctx.mode !== "tui") return;
-		let session: AgentSession | undefined;
 		let tui: TUI | undefined;
 		let unsubscribe: (() => void) | undefined;
 		let stopped = false;
@@ -16,10 +16,15 @@ export default function (pi: ExtensionAPI) {
 
 		function update() {
 			try {
-				if (!disabled && session && hasPending(session)) {
+				const pending = !disabled && session && hasPending(session);
+				const queued = !disabled && session && hasQueued(session);
+				if (pending || queued) {
 					ctx.ui.setWidget("pi-queue-message", (ui, theme) => {
 						tui = ui;
-						return new Text(theme.style("tab", { fg: "text", bold: true }) + theme.fg("dim", " queue newest message"), 0, 0);
+						const hints = [];
+						if (pending) hints.push(theme.style("tab", { fg: "text", bold: true }) + theme.fg("dim", " queue newest message"));
+						if (queued) hints.push(theme.style("/unqueue", { fg: "text", bold: true }) + theme.fg("dim", " edit newest queued message"));
+						return new Text(hints.join(theme.fg("dim", " | ")), 0, 0);
 					});
 					return;
 				}
@@ -66,9 +71,24 @@ export default function (pi: ExtensionAPI) {
 			restore();
 			unsubscribe?.();
 			removeInput();
+			session = undefined;
 			ctx.ui.setWidget("pi-queue-message", undefined);
 		};
 	});
 
 	pi.on("session_shutdown", () => { cleanup?.(); cleanup = undefined; });
+
+	pi.registerCommand("unqueue", {
+		description: "Return the newest queued message to the input",
+		handler: async (_args, ctx) => {
+			if (ctx.mode !== "tui") throw new Error("/unqueue requires TUI mode.");
+			const text = session && unqueueNewest(session);
+			if (text === undefined) {
+				ctx.ui.notify("No queued message to restore.", "info");
+				return;
+			}
+			const draft = ctx.ui.getEditorText();
+			ctx.ui.setEditorText(draft ? `${text}\n\n${draft}` : text);
+		},
+	});
 }
