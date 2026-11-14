@@ -66,8 +66,16 @@ jobs:
           PACKAGE: ${{ inputs.package }}
           VERSION_BUMP: ${{ inputs.version_bump }}
         run: node .github/scripts/prepare-publish.mjs
-      - run: npm run check
-      - run: npm test
+      - name: Check selected package
+        env:
+          WORKSPACE: ${{ steps.package.outputs.workspace }}
+        run: npm run check --workspace="$WORKSPACE"
+      - name: Test release helpers
+        run: npm run test:release
+      - name: Test selected package
+        env:
+          WORKSPACE: ${{ steps.package.outputs.workspace }}
+        run: npm run test --workspace="$WORKSPACE" --if-present
       - name: Preview package contents
         env:
           WORKSPACE: ${{ steps.package.outputs.workspace }}

@@ -134,7 +134,7 @@ On GitHub, open **Actions → Publish npm package → Run workflow**:
 
 4. Leave **Check the package without publishing** selected for a preview, or clear it to publish.
 
-The workflow prepares the selected version, runs type checks and tests, and lists the package contents.
+The workflow prepares the selected version, runs type checks and tests for that package plus the release-helper tests, and lists the package contents.
 The run summary shows the old and new versions.
 Preview runs apply the bump only in the runner's checkout and do not commit, push, or publish.
 
@@ -147,7 +147,7 @@ Start a new run from the current `main` in that case.
 If npm publishing fails after the bump was pushed, resolve the error and start a new run with `none` to retry the still-unpublished version.
 Versions must be stable releases, such as `0.1.1`.
 npm rejects versions that have already been published.
-The **CI** workflow also runs checks on pull requests and pushes to `main`.
+The **CI** workflow checks and tests all extensions on pull requests and pushes to `main`.
 
 You can still bump a version locally, commit the manifest and lockfile, and select `none` in the workflow:
 

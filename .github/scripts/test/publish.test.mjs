@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -98,6 +98,45 @@ test("invalid bump, branch, and package inputs fail before changing files", t =>
 	assert.notEqual(result.status, 0);
 	assert.match(result.stderr, /symlink or file/);
 	assert.equal(f.run("git", ["diff", "--name-only"]), "");
+});
+
+test("publish checks only the selected package, skips absent tests, and propagates failures", t => {
+	const f = fixture(t);
+	const rootManifest = join(f.cwd, "package.json");
+	const root = JSON.parse(readFileSync(rootManifest, "utf8"));
+	root.scripts = { check: "npm run check --workspaces", test: "npm run test --workspaces --if-present" };
+	writeFileSync(rootManifest, JSON.stringify(root));
+	for (const name of ["pi-first", "pi-second"]) {
+		const path = join(f.cwd, "packages", name, "package.json");
+		const manifest = JSON.parse(readFileSync(path, "utf8"));
+		const script = name === "pi-first"
+			? "node -e \"require('node:fs').writeFileSync(process.env.npm_lifecycle_event + '-ran', 'yes')\""
+			: "node -e \"process.exit(9)\"";
+		manifest.scripts = { check: script, test: script };
+		writeFileSync(path, JSON.stringify(manifest));
+	}
+	function runStep(name) {
+		const step = workflow.jobs.publish.steps.find(step => step.name === name);
+		assert.equal(step.env.WORKSPACE, "${{ steps.package.outputs.workspace }}");
+		return spawnSync("bash", ["-e", "-c", step.run], {
+			cwd: f.cwd, encoding: "utf8", env: { ...f.env, WORKSPACE: "packages/pi-first" },
+		});
+	}
+	for (const [step, marker] of [["Check selected package", "check-ran"], ["Test selected package", "test-ran"]]) {
+		const result = runStep(step);
+		assert.equal(result.status, 0, result.stderr);
+		assert(existsSync(join(f.cwd, "packages/pi-first", marker)));
+	}
+	const selectedPath = join(f.cwd, "packages/pi-first/package.json");
+	const selected = JSON.parse(readFileSync(selectedPath, "utf8"));
+	delete selected.scripts.test;
+	writeFileSync(selectedPath, JSON.stringify(selected));
+	assert.equal(runStep("Test selected package").status, 0);
+	selected.scripts.test = "node -e \"process.exit(7)\"";
+	selected.scripts.check = "node -e \"process.exit(8)\"";
+	writeFileSync(selectedPath, JSON.stringify(selected));
+	assert.notEqual(runStep("Test selected package").status, 0);
+	assert.notEqual(runStep("Check selected package").status, 0);
 });
 
 test("the workflow commit step pushes the manifest and lockfile bump together", t => {
