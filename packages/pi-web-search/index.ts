@@ -48,7 +48,7 @@ Use web_fetch to read a result before relying on details beyond its excerpt. Dom
 		promptSnippet: "Search the web for current information and source URLs.",
 		parameters: Type.Object({
 			query: Type.String({ minLength: 1, maxLength: 1000, description: "Search question or keywords." }),
-			count: Type.Optional(Type.Integer({ minimum: 1, maximum: 10, description: "Maximum results. Defaults to 5." })),
+			count: Type.Optional(Type.Integer({ minimum: 1, maximum: 15, description: "Maximum results. Defaults to 5." })),
 			include_domains: Type.Optional(domains("Restrict results to these domains, such as docs.python.org.")),
 			exclude_domains: Type.Optional(domains("Exclude results from these domains.")),
 			published_after: Type.Optional(date("Earliest publication date, YYYY-MM-DD.")),

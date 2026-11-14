@@ -37,7 +37,7 @@ Find relevant web pages and return their titles, URLs, excerpts, and publication
 | Argument | Meaning |
 | --- | --- |
 | `query` | Required search question or keywords. |
-| `count` | Maximum results, 1–10. Defaults to 5. |
+| `count` | Maximum results, 1–15. Defaults to 5. |
 | `include_domains` | Restrict results to these domain names. |
 | `exclude_domains` | Exclude these domain names. |
 | `published_after` | Earliest publication date, `YYYY-MM-DD`. |

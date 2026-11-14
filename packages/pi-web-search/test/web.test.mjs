@@ -274,7 +274,9 @@ test("tool schemas reject invalid options and structured errors match the declar
 	extension({ registerTool: tool => tools.set(tool.name, tool), on: (_event, handler) => { shutdown = handler; } });
 	t.after(() => shutdown());
 	assert.deepEqual([...tools.keys()], ["web_search", "web_fetch"]);
+	assert(Check(tools.get("web_search").parameters, { query: "q", count: 15 }));
 	for (const [name, args] of [["web_search", { query: "q", count: 0 }], ["web_search", { query: "q", count: 1.5 }],
+		["web_search", { query: "q", count: 16 }],
 		["web_fetch", { url: "https://example.org", offset: -1 }], ["web_fetch", { url: "https://example.org", max_chars: 25_000 }]]) {
 		assert.equal(Check(tools.get(name).parameters, args), false);
 	}
