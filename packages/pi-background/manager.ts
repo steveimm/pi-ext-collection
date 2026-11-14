@@ -39,6 +39,7 @@ interface OutputLog {
 
 interface ProcessJob {
 	id: string;
+	toolCallId: string | undefined;
 	options: CommandOptions;
 	status: "running" | "completed" | "failed" | "stopped";
 	exitCode: number | null;
@@ -241,10 +242,10 @@ export class BackgroundManager {
 		return processInfo(this.createProcess(options, operations));
 	}
 
-	startForeground(options: CommandOptions, operations: BashOperations, onData: (data: Buffer) => void): ForegroundProcess {
+	startForeground(options: CommandOptions, operations: BashOperations, onData: (data: Buffer) => void, toolCallId: string): ForegroundProcess {
 		let onBackground!: () => void;
 		const backgrounded = new Promise<void>(resolve => { onBackground = resolve; });
-		const job = this.createProcess(options, operations, { onData, onBackground });
+		const job = this.createProcess(options, operations, { onData, onBackground, toolCallId });
 		return {
 			id: job.id,
 			backgrounded,
@@ -260,8 +261,16 @@ export class BackgroundManager {
 		};
 	}
 
+	private latestForeground(): ProcessJob | undefined {
+		return [...this.processes.values()].reverse().find(job => job.status === "running" && !job.background);
+	}
+
+	foregroundToolCallId(): string | undefined {
+		return this.latestForeground()?.toolCallId;
+	}
+
 	backgroundLatest(): string | undefined {
-		const job = [...this.processes.values()].reverse().find(job => job.status === "running" && !job.background);
+		const job = this.latestForeground();
 		if (!job) return undefined;
 		job.background = true;
 		job.onData = undefined;
@@ -279,11 +288,11 @@ export class BackgroundManager {
 	}
 
 	private createProcess(options: CommandOptions, operations: BashOperations,
-		foreground?: { onData: (data: Buffer) => void; onBackground: () => void }): ProcessJob {
+		foreground?: { onData: (data: Buffer) => void; onBackground: () => void; toolCallId: string }): ProcessJob {
 		if (!options.command.trim()) throw new Error("Provide a non-empty command.");
 		const id = `process-${randomUUID()}`;
 		const job: ProcessJob = {
-			id, options, status: "running", exitCode: null, error: undefined,
+			id, toolCallId: foreground?.toolCallId, options, status: "running", exitCode: null, error: undefined,
 			startedAt: new Date().toISOString(), finishedAt: undefined, log: this.createLog(id),
 			controller: new AbortController(), done: Promise.resolve(),
 			background: foreground === undefined, onData: foreground?.onData,
@@ -291,7 +300,7 @@ export class BackgroundManager {
 		};
 		this.processes.set(id, job);
 		job.done = this.runProcess(job, operations);
-		if (job.background) this.changed();
+		this.changed();
 		return job;
 	}
 
@@ -320,6 +329,7 @@ export class BackgroundManager {
 			}
 		} finally {
 			job.finishedAt = new Date().toISOString();
+			if (!job.background) this.changed();
 			if (job.background && job.status !== "stopped") {
 				this.queue({
 					id: job.id, kind: "process", event: job.status, command: job.options.command, cwd: job.options.cwd,
@@ -356,7 +366,7 @@ export class BackgroundManager {
 		if (job.status === "running") {
 			job.status = "stopped";
 			job.controller.abort();
-			if (job.background) this.changed();
+			this.changed();
 		}
 	}
 

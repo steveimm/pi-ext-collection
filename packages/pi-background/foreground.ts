@@ -42,7 +42,7 @@ export function createManagedBash(
 							exec: (_command, directory, job) => backend.exec(command, directory, {
 								...job, ...(execution.env === undefined ? {} : { env: execution.env }),
 							}),
-						}, execution.onData);
+						}, execution.onData, callId);
 						const running = process;
 						const abort = () => running.cancel();
 						if (execution.signal?.aborted) abort();

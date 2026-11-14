@@ -13,6 +13,7 @@ import {
 import { Type } from "typebox";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { createManagedBash } from "./foreground.js";
+import { registerBackgroundHint } from "./hint.js";
 import { attachBackgroundStatus } from "./status.js";
 import { showBackgroundTasks } from "./ui.js";
 import { BackgroundManager, expandHome, resolveDirectory, type CommandOptions } from "./manager.js";
@@ -182,6 +183,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerTool(createManagedBash(current, shellOptions));
+	registerBackgroundHint(pi, () => manager);
 
 	pi.registerTool({
 		name: "bg_process",
