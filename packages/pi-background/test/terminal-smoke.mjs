@@ -11,6 +11,7 @@ import { assertKeyHints, until } from "./helpers.mjs";
 
 const packagePath = process.env.PI_BACKGROUND_TEST_PACKAGE ?? fileURLToPath(new URL("..", import.meta.url));
 const providerPath = fileURLToPath(new URL("fixtures/provider.js", import.meta.url));
+const backgroundHint = "ctrl+b send to background";
 const cliPath = join(dirname(fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"))), "bundle/cli.js");
 
 function quote(value) {
@@ -94,8 +95,14 @@ async function run(mode) {
 		sendCall("keyboard-task", "bash", { command: "touch started; while [ ! -f release ]; do sleep 0.1; done; printf completed" });
 		await until(() => existsSync(join(root, "started")));
 		assert.equal(statusRow(), undefined, "Foreground commands must not be counted as background work.");
+		await until(() => screen().split("\n").some(line => /Elapsed [\d.]+s/.test(line) && line.includes(backgroundHint)));
+		tmux("resize-window", "-t", "test", "-x", "32", "-y", "35");
+		await until(() => /Elapsed [\d.]+s[^\n]*\n[^\n]*ctrl\+b send to background/.test(screen()));
+		tmux("resize-window", "-t", "test", "-x", "110", "-y", "35");
+		await until(() => screen().split("\n").some(line => /Elapsed [\d.]+s/.test(line) && line.includes(backgroundHint)));
 		keys("C-b");
 		const text = await result("keyboard-task");
+		assert(!screen().includes(backgroundHint));
 		assert.match(text, /The user moved this command to the background/);
 		const id = text.match(/process-[a-f0-9-]+/)[0];
 		sendCall("keyboard-followup", "bash", { command: "printf usable > still-chatting" });
@@ -116,8 +123,10 @@ text("MOVED:" + moved.id);
 text("SIBLING:" + sibling.id);
 ` });
 		await until(() => existsSync(join(root, "code-start")));
+		await until(() => screen().split("\n").some(line => /Elapsed [\d.]+s/.test(line) && line.includes(backgroundHint)));
 		keys("C-b");
 		const codeText = await result("keyboard-codemode");
+		assert(!screen().includes(backgroundHint));
 		const ids = [codeText.match(/MOVED:(process-[a-f0-9-]+)/)[1], codeText.match(/SIBLING:(process-[a-f0-9-]+)/)[1]];
 		assert.notEqual(ids[0], ids[1]);
 		writeFileSync(join(root, "code-release"), "");
@@ -125,6 +134,32 @@ text("SIBLING:" + sibling.id);
 		await until(() => ids.every(id => updates().some(event => event.id === id && event.event === "completed")));
 		await until(() => statusRow() === undefined);
 		console.log(`${mode}: Ctrl+B works inside codemode alongside an independent background process.`);
+
+		sendCall("parallel-hints", "codemode", { code: `
+const first = tools.bash({command: "touch parallel-a; while [ ! -f parallel-release ]; do sleep 0.1; done"});
+const second = tools.bash({command: "touch parallel-b; while [ ! -f parallel-release ]; do sleep 0.1; done"});
+const movedSecond = await second;
+if (!movedSecond.background) throw new Error("Second command must be backgrounded first");
+text("SECOND:" + movedSecond.id);
+const movedFirst = await first;
+if (!movedFirst.background) throw new Error("First command must also be backgrounded");
+text("FIRST:" + movedFirst.id);
+` });
+		await until(() => existsSync(join(root, "parallel-a")) && existsSync(join(root, "parallel-b")));
+		await expectScreen(backgroundHint);
+		assert.equal(screen().split(backgroundHint).length - 1, 1);
+		keys("C-b");
+		await until(() => statusRow()?.includes("1 background process"));
+		assert(screen().includes(backgroundHint));
+		assert.equal(toolResult("parallel-hints"), undefined);
+		keys("C-b");
+		const parallelText = await result("parallel-hints");
+		assert.match(parallelText, /SECOND:process-/);
+		assert.match(parallelText, /FIRST:process-/);
+		assert(!screen().includes(backgroundHint));
+		writeFileSync(join(root, "parallel-release"), "");
+		await until(() => statusRow() === undefined);
+		console.log(`${mode}: elapsed-time hints wrap, follow parallel commands, and disappear after backgrounding.`);
 
 		sendCall("ui-worker", "bg_process", {
 			action: "start", label: "Worker", command: "echo $$ > worker.pid; sleep 600 & echo $! > child.pid; wait",
