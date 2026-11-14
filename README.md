@@ -25,47 +25,10 @@ pi install npm:@steveimm/pi-chat-template-kwargs
 ```text
 packages/
   pi-web-search/
-    package.json
-    tsconfig.json
-    index.ts
-    search.ts
-    exa.ts
-    network.ts
-    pages.ts
-    test/
-    README.md
-    LICENSE
   pi-queue-message/
-    package.json
-    tsconfig.json
-    index.ts
-    queue.ts
-    test/
-    README.md
-    LICENSE
   pi-background/
-    package.json
-    tsconfig.json
-    index.ts
-    manager.ts
-    foreground.ts
-    status.ts
-    ui.ts
-    test/
-    README.md
-    LICENSE
   pi-change-dir/
-    package.json
-    tsconfig.json
-    index.ts
-    README.md
-    LICENSE
   pi-chat-template-kwargs/
-    package.json
-    tsconfig.json
-    index.ts
-    README.md
-    LICENSE
 package.json
 package-lock.json
 tsconfig.base.json
