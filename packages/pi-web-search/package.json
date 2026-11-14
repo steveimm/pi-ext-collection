@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "description": "Web search and readable page fetching for Pi",
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs"
   },
   "keywords": [
     "pi-package"
@@ -37,7 +38,7 @@
     "typebox": "*"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=22.19.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -51,6 +52,7 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "1.5.1",
     "@types/turndown": "5.0.6",
+    "jiti": "2.7.0",
     "typebox": "1.3.27"
   }
 }

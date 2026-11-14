@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { abortable, boundedText, cleanText, WebError, type SearchOptions, type SearchProvider, type SearchResponse } from "./search.js";
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -55,7 +56,11 @@ export class ExaSearch implements SearchProvider {
 			return normalizeExa(data, options.count ?? 5);
 		} catch (error) {
 			if (signal.aborted) throw signal.reason;
-			if (error instanceof WebError) throw error;
+			if (error instanceof WebError) {
+				if (this.apiKey) error.message = error.message.replaceAll(this.apiKey, "[redacted]");
+				throw error;
+			}
+			if (error instanceof McpError && error.code === ErrorCode.RequestTimeout) throw new WebError("timeout", "Exa search timed out.");
 			if (error instanceof StreamableHTTPError) {
 				if (error.code === 429) throw new WebError("rate_limited", "Exa rate limit reached. Try again later or configure EXA_API_KEY.");
 				if (error.code === 401 || error.code === 403) throw new WebError("authentication", "Exa rejected authentication. Check EXA_API_KEY.");

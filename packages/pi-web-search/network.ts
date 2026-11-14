@@ -22,7 +22,7 @@ export function pageUrl(value: string): URL {
 	return url;
 }
 
-const publicLookup: LookupFunction = (hostname, options, callback) => {
+export const publicLookup: LookupFunction = (hostname, options, callback) => {
 	lookup(hostname, { ...options, all: true }, (error, addresses) => {
 		if (error) return callback(error, "", 0);
 		if (!addresses.length || addresses.some(item => !publicAddress(item.address))) {
@@ -58,12 +58,13 @@ async function readBody(response: Response, signal: AbortSignal): Promise<string
 
 export class PageDownloader {
 	private readonly agent = new Agent({ connections: 4, connect: { lookup: publicLookup, timeout: 10_000 } });
+	constructor(private readonly request: typeof fetch = fetch) {}
 
 	async download(value: string, signal: AbortSignal): Promise<{ url: string; type: string; text: string }> {
 		let url = pageUrl(value);
 		try {
 			for (let redirects = 0; redirects <= 5; redirects++) {
-				const response = await fetch(url, {
+				const response = await this.request(url, {
 					dispatcher: this.agent,
 					redirect: "manual",
 					signal,
