@@ -13,6 +13,7 @@ on:
           - pi-change-dir
           - pi-chat-template-kwargs
           - pi-queue-message
+          - pi-web-search
       version_bump:
         description: 'Version bump (none keeps the current package.json version)'
         type: choice
