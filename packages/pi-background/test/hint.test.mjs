@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createBashToolDefinition, initTheme, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
+import { createBashToolDefinition, initTheme, rawKeyHint, ToolExecutionComponent } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, visibleWidth } from "@earendil-works/pi-tui";
 import { BackgroundManager } from "../manager.ts";
 import { registerBackgroundHint } from "../hint.ts";
@@ -12,7 +12,9 @@ const moduleUrl = import.meta.resolve("@earendil-works/pi-coding-agent");
 const { theme } = await import(new URL("./modes/interactive/theme/theme.js", moduleUrl));
 const { codemodeRenderers } = await import(new URL("./extensions/codemode/renderer.js", moduleUrl));
 initTheme("dark");
-const hint = "ctrl+b send to background";
+const backgroundKey = process.platform === "darwin" ? "option+b" : "alt+b";
+const hint = `${backgroundKey} send to background`;
+const hintPattern = hint.replace("+", "\\+");
 
 function setup(t) {
 	const cwd = mkdtempSync(join(tmpdir(), "pi-background-hint-"));
@@ -68,9 +70,9 @@ test("the shortcut follows the latest foreground command through completion and 
 	const firstRow = row("first");
 	assert(!firstRow.text().includes(hint));
 	start("first");
-	assert.match(firstRow.text(), /Elapsed [\d.]+s · ctrl\+b send to background/);
+	assert.match(firstRow.text(), new RegExp(`Elapsed [\\d.]+s · ${hintPattern}`));
 	assert.match(firstRow.text(), /build output/);
-	assert(firstRow.lines().some(line => line.includes(theme.style("ctrl+b", { fg: "text", bold: true }))));
+	assert(firstRow.lines().some(line => line.includes(theme.style(rawKeyHint("alt+b", ""), { bold: true }))));
 	const secondRow = row("second");
 	const second = start("second");
 	assert(!firstRow.text().includes(hint));
@@ -92,8 +94,8 @@ test("the hint wraps below elapsed time on narrow terminals without changing the
 	start("narrow");
 	const narrow = view.lines(32);
 	assert(narrow.every(line => visibleWidth(line) <= 32));
-	assert.match(view.text(32), /Elapsed [\d.]+s[^\n]*\n[^\n]*ctrl\+b send to background/);
-	assert.match(view.text(), /Elapsed [\d.]+s · ctrl\+b send to background/);
+	assert.match(view.text(32), new RegExp(`Elapsed [\\d.]+s[^\\n]*\\n[^\\n]*${hintPattern}`));
+	assert.match(view.text(), new RegExp(`Elapsed [\\d.]+s · ${hintPattern}`));
 	view.component.invalidate();
 	assert.equal(view.text().split(hint).length - 1, 1);
 	assert.match(view.text(), /build output/);

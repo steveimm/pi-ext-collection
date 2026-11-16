@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { rawKeyHint, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, Text, visibleWidth, type Component } from "@earendil-works/pi-tui";
 import type { BackgroundManager } from "./manager.js";
 
@@ -56,7 +56,7 @@ export function registerBackgroundHint(pi: ExtensionAPI, getManager: () => Backg
 				const body = renderResult(result, options, theme, {
 					...context, lastComponent: previous instanceof BackgroundHint ? previous.body : previous,
 				});
-				const hint = theme.style("ctrl+b", { fg: "text", bold: true }) + theme.fg("muted", " send to background");
+				const hint = theme.style(rawKeyHint("alt+b", ""), { bold: true }) + theme.fg("muted", "send to background");
 				return new BackgroundHint(body, () => options.isPartial && isTarget(context.toolCallId), hint);
 			},
 		};

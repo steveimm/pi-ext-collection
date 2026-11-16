@@ -53,11 +53,12 @@ Hints show the keys in bold, such as **x** kill selected task and **esc** close.
 
 ## Background a running Bash command
 
-Press **Ctrl+B** while the agent's Bash command is running to move it to the background.
-The eligible command shows **ctrl+b** send to background beside its elapsed time, or below it on narrow terminals.
+Press **Alt+B** while the agent's Bash command is running to move it to the background.
+The eligible command shows **alt+b** send to background beside its elapsed time, or below it on narrow terminals.
+Pi displays the key as **option+b** on macOS.
 For commands inside codemode, the hint appears beside the script's elapsed time.
 With parallel commands, the hint follows the most recently started foreground command and disappears when none remain.
-With tmux's default prefix, press Ctrl+B twice to send the key to Pi.
+When no foreground command is running, Alt+B retains Pi's word-left behavior.
 The shortcut selects the most recently started foreground Bash command.
 The result tells the agent that the user moved the command to the background.
 
@@ -199,7 +200,7 @@ The terminal suite requires tmux and checks both regular and fullscreen modes:
 npm run test:terminal --workspace=packages/pi-background
 ```
 
-It covers Ctrl+B, the centered indicator, history and draft preservation, autocomplete, reload, task details, and the `x` and esc controls.
+It covers Alt+B, the centered indicator, history and draft preservation, autocomplete, reload, task details, and the `x` and esc controls.
 
 The optional GPT test uses your Pi authentication and makes model requests:
 

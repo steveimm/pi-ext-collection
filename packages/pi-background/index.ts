@@ -143,7 +143,7 @@ export default function (pi: ExtensionAPI) {
 		if (ctx.mode === "tui") {
 			removeStatus = attachBackgroundStatus(manager, ctx);
 			removeInputHandler = ctx.ui.onTerminalInput(data => {
-				if (!matchesKey(data, "ctrl+b")) return;
+				if (!matchesKey(data, "alt+b")) return;
 				const id = manager?.backgroundLatest();
 				if (!id) return;
 				ctx.ui.notify(`Moved command to the background: ${id}`, "info");

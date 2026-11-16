@@ -250,7 +250,7 @@ export class BackgroundManager {
 			id: job.id,
 			backgrounded,
 			cancel: () => {
-				// Ctrl+B takes effect before the caller's abort listener is removed.
+				// Backgrounding takes effect before the caller's abort listener is removed.
 				if (!job.background) this.cancelProcess(job);
 			},
 			completed: job.done.then(() => {
