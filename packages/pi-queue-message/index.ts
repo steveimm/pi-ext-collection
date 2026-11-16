@@ -1,4 +1,4 @@
-import { InteractiveMode, type AgentSession, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { InteractiveMode, rawKeyHint, type AgentSession, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { matchesKey, Text, type EditorComponent, type TUI } from "@earendil-works/pi-tui";
 import { createMessageQueue, type CompactionMessage, type DeliveryMode } from "./queue.js";
 
@@ -81,8 +81,7 @@ export default function (pi: ExtensionAPI) {
 			const display = this;
 			ctx.ui.setWidget("pi-queue-message", (_ui, theme) => {
 				const toggle = theme.style("tab", { fg: "text", bold: true }) + theme.fg("dim", " toggle steering or follow up");
-				const sendKey = process.platform === "darwin" ? "option+s" : "alt+s";
-				const send = theme.style(sendKey, { fg: "text", bold: true }) + theme.fg("dim", " force send");
+				const send = theme.style(rawKeyHint("alt+s", ""), { bold: true }) + theme.fg("dim", "force send");
 				const hint = new Text("", 0, 0);
 				return {
 					render(width: number) {
