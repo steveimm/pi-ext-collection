@@ -1,6 +1,6 @@
 {
   "name": "@steveimm/pi-change-dir",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Change Pi working directory with /cd while continuing the current session",
   "scripts": {
     "check": "tsc --noEmit",
