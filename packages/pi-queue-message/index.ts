@@ -9,6 +9,7 @@ interface PendingDisplay {
 	compactionQueuedMessages: CompactionMessage[];
 	getAllQueuedMessages(): { steering: readonly string[]; followUp: readonly string[] };
 	queueCompactionMessage(text: string, mode: DeliveryMode): void;
+	restoreQueuedMessagesToEditor(options?: { abort?: boolean }): number;
 	updatePendingMessagesDisplay(): void;
 }
 
@@ -52,7 +53,8 @@ export default function (pi: ExtensionAPI) {
 			if (view) return;
 			if (!Array.isArray(display.compactionQueuedMessages)
 				|| typeof display.getAllQueuedMessages !== "function"
-				|| typeof display.queueCompactionMessage !== "function") {
+				|| typeof display.queueCompactionMessage !== "function"
+				|| typeof display.restoreQueuedMessagesToEditor !== "function") {
 				throw new Error("pi-queue-message does not support this Pi pending-message display.");
 			}
 			const controller = createMessageQueue(display.session, () => display.compactionQueuedMessages);
@@ -102,7 +104,11 @@ export default function (pi: ExtensionAPI) {
 
 		const removeInput = ctx.ui.onTerminalInput(data => {
 			if (stopped || disabled || !view || !queue || !editorFocused(view)) return;
-			if (matchesKey(data, "escape")) { queue.cancelForce(); return; }
+			if (matchesKey(data, "escape") && queue.isForcing) {
+				queue.cancelForce();
+				view.restoreQueuedMessagesToEditor({ abort: !view.session.isIdle });
+				return { consume: true };
+			}
 			if (!matchesKey(data, "tab") || view.editor.getText() !== "") return;
 			try {
 				if (queue.toggle()) return { consume: true };

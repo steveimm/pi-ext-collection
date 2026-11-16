@@ -15,6 +15,7 @@ const backgroundPath = fileURLToPath(new URL("../../pi-background", import.meta.
 const providerSource = fileURLToPath(new URL("fixtures/provider.js", import.meta.url));
 const cliPath = join(dirname(fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"))), "bundle/cli.js");
 const toggleHint = "tab toggle steering or follow up";
+const forceHint = "alt+s force send";
 
 function quote(value) { return `'${value.replace(/'/g, `'\''`)}'`; }
 
@@ -28,8 +29,9 @@ async function run(mode, order, withImage = false) {
 	const socket = `pi-queue-${randomUUID()}`;
 	const editKey = withImage ? "M-q" : "M-Up";
 	let started = false;
+	mkdirSync(join(root, "agent"));
+	writeFileSync(join(root, "agent/settings.json"), JSON.stringify({ compaction: { keepRecentTokens: 128 } }));
 	if (withImage) {
-		mkdirSync(join(root, "agent"));
 		writeFileSync(join(root, "agent/keybindings.json"), JSON.stringify({ "app.message.dequeue": "alt+q" }));
 	}
 
@@ -71,7 +73,7 @@ async function run(mode, order, withImage = false) {
 		const command = ["env", `PI_CODING_AGENT_DIR=${join(root, "agent")}`, "PI_OFFLINE=1", "PI_SKIP_VERSION_CHECK=1", "PI_TELEMETRY=0",
 			process.execPath, cliPath, "--offline", "--no-approve", "--no-extensions", "--no-mcp", "--no-skills", "--no-context-files",
 			"--provider", "queue-test", "--model", "test", "--session-dir", join(root, "sessions"), "--tui-mode", mode,
-			...extensions.flatMap(path => ["-e", path]), "-e", providerPath].map(quote).join(" ");
+			...extensions.flatMap(path => ["-e", path]), "-e", providerPath, "-e", "builtin:codemode", "--tools", "+codemode"].map(quote).join(" ");
 		tmux("new-session", "-d", "-s", "verify", "-x", "110", "-y", "35", "-c", root, "sleep 600");
 		started = true;
 		tmux("set-option", "-w", "-t", "verify", "remain-on-exit", "on");
@@ -108,7 +110,7 @@ async function run(mode, order, withImage = false) {
 		const hintIndex = lines.findIndex(line => line.includes(toggleHint));
 		assert(hintIndex > lastMessage + 1, "The extension hint must be outside the native pending-message block.");
 		assert(lines.slice(hintIndex + 1).some(line => line.includes("Working")), "The hint must be above the working/input row.");
-		assertKeyHints(screen(true).split("\n").find(line => stripTerminalSequences(line).includes(toggleHint)), ["tab"]);
+		assertKeyHints(screen(true).split("\n").find(line => stripTerminalSequences(line).includes(toggleHint)), ["tab", "alt+s"]);
 		assert(!screen().includes("tab follow-up all"));
 		assert(!screen().includes("tab steer all"));
 
@@ -143,6 +145,7 @@ async function run(mode, order, withImage = false) {
 		await send("/test-dialog");
 		await expectScreen("Test dialog");
 		keys("Tab");
+		keys("M-s");
 		await sleep(75);
 		keys("Escape");
 		await wait(() => !screen().includes("Test dialog"), "dialog closed");
@@ -222,9 +225,61 @@ async function run(mode, order, withImage = false) {
 		assert(!screen().includes(toggleHint));
 		assert(!messages().some(message => message.role === "user"
 			&& /^(EDIT_|AFTER_EDIT|COMPACT_|FORCED_|ESC_)/.test(messageText(message))));
+
+		for (const stage of ["tool", "stream", "code", "compaction"]) {
+			await send(stage === "compaction" ? "/test-real-compaction" : `FORCE_${stage.toUpperCase()}`);
+			await wait(() => existsSync(join(root, `started-force-${stage}`)), `force ${stage} started`);
+			const noticesBefore = entries().filter(entry => entry.type === "custom_message" && entry.customType.startsWith("background-")).length;
+			if (stage === "tool") await send("/test-notifications");
+			await send(`SEND_FIRST_${stage}`);
+			keys("Tab");
+			await expectScreen(`Follow-up: SEND_FIRST_${stage}`);
+			await send(withImage && stage !== "compaction" ? `/test-image SEND_SECOND_${stage}` : `SEND_SECOND_${stage}`);
+			await send(`/test-compaction SEND_COMPACT_${stage}`);
+			keys("-l", `DRAFT_${stage}`);
+			await expectScreen(forceHint);
+			assert(!screen().includes(toggleHint));
+			assertKeyHints(screen(true).split("\n").find(line => stripTerminalSequences(line).includes(forceHint)), ["alt+s"]);
+			keys("M-s", "M-s");
+			await wait(() => messages().some(message => message.role === "assistant" && messageText(message).startsWith(`FORCED_REPLY:SEND_FIRST_${stage}`)), `forced ${stage} reply`);
+			await wait(() => existsSync(join(root, "settled")), `forced ${stage} settled`);
+			const expected = `SEND_FIRST_${stage}\n\nSEND_SECOND_${stage}\n\nSEND_COMPACT_${stage}`;
+			const delivered = messages().filter(message => message.role === "user" && messageText(message).includes(`SEND_FIRST_${stage}`));
+			assert.equal(delivered.length, 1);
+			assert.equal(messageText(delivered[0]), expected);
+			if (withImage && stage !== "compaction") assert.equal(delivered[0].content.filter(part => part.type === "image").length, 1);
+			state = await snapshot();
+			assert.equal(state.text, `DRAFT_${stage}`);
+			assert.deepEqual(state.steering, []);
+			assert.deepEqual(state.followUp, []);
+			assert.deepEqual(state.compaction, []);
+			if (stage === "tool") {
+				assert.deepEqual(state.customSteer, []);
+				assert.deepEqual(state.customFollow, []);
+				assert.equal(entries().filter(entry => entry.type === "custom_message" && entry.customType.startsWith("background-")).length, noticesBefore + 2);
+			}
+			assert(!messages().some(message => message.role === "user" && messageText(message).includes(`DRAFT_${stage}`)));
+			assert(!screen().includes(forceHint));
+			keys("M-s");
+		}
+		await send("FORCE_CANCEL");
+		await wait(() => existsSync(join(root, "started-force-cancel")), "cancellation fixture started");
+		await send("/test-delay-abort");
+		await send("SEND_CANCELLED");
+		keys("-l", "CANCEL_DRAFT");
+		keys("M-s");
+		await wait(() => existsSync(join(root, "handoff-waiting")), "waiting between abort and submission");
+		keys("Escape");
+		await expectScreen("SEND_CANCELLED");
+		state = await snapshot();
+		assert.equal(state.text, "SEND_CANCELLED\n\nCANCEL_DRAFT");
+		assert.deepEqual(state.steering, []);
+		assert.deepEqual(state.followUp, []);
+		assert(!messages().some(message => message.role === "user" && messageText(message).includes("SEND_CANCELLED")));
+		writeFileSync(join(root, "release-handoff"), "");
 		await send("/quit");
 		await wait(() => tmux("display-message", "-p", "-t", "verify", "#{pane_dead}").trim() === "1", "shutdown");
-		console.log(`${mode}, ${order}: toggles, inheritance, ordering, native editing/Escape, compaction, and hint placement passed.`);
+		console.log(`${mode}, ${order}: queue controls, forced generation/tools/code mode/compaction, cancellation, drafts, images, notices, and hints passed.`);
 	} catch (error) {
 		if (started) console.error(tmux("capture-pane", "-t", "verify", "-p", "-S", "-100"));
 		throw error;

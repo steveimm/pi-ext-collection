@@ -152,10 +152,10 @@ export function createMessageQueue(session: AgentSession, compactionMessages: ()
 				if (!session.model) throw new Error("Select a model before sending queued messages.");
 				const images = held.flatMap(({ message }) => typeof message.content === "string" ? []
 					: message.content.filter(part => part.type === "image"));
+				if (force === operation) force = undefined;
 				// Queued messages already passed input hooks and template expansion.
 				await state._startRun({ messageType: "user", prompt: held.map(item => messageText(item.message)).join("\n\n"), images }, () => {
 					started = true;
-					if (force === operation) force = undefined;
 				});
 				return true;
 			} catch (error) {
