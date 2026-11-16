@@ -63,7 +63,7 @@ async function run(mode, order) {
 		tmux("respawn-pane", "-k", "-t", "verify", "-c", root, `exec ${command}`);
 		await wait(() => screen().includes("0.0%/128k"), "Pi startup");
 		await send("FIRST first question");
-		await wait(() => screen().includes("Working 1s"), "live duration beside Working");
+		await wait(() => screen().includes("Working • 1s"), "live duration beside Working");
 		await complete("FIRST", 1);
 		assert.match(completions()[0].content, /^Worked for \d+s • \d{1,2}:\d{2} [AP]M$/);
 		assert(!screen().includes("Working "));

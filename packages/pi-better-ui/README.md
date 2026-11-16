@@ -32,7 +32,7 @@ Sticky prompts are unavailable in regular mode, where the terminal controls scro
 The native loading animation shows elapsed time beside its label:
 
 ```text
-Working 15s
+Working • 15s
 ```
 
 When the run ends, a line follows the response:

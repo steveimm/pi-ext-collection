@@ -5,7 +5,6 @@ export const timingMessageType = "pi-better-ui/worked";
 
 export function formatDuration(milliseconds: number): string {
 	const seconds = Math.max(0, Math.floor(milliseconds / 1000));
-	if (seconds === 0) return "<1s";
 	const hours = Math.floor(seconds / 3600);
 	const minutes = Math.floor(seconds / 60) % 60;
 	return hours ? `${hours}h ${minutes}m ${seconds % 60}s`
@@ -34,7 +33,7 @@ export function registerTiming(pi: ExtensionAPI): void {
 		if (ctx.mode !== "tui" || started !== undefined) return;
 		started = performance.now();
 		const update = () => {
-			if (started !== undefined) ctx.ui.setWorkingMessage(`Working ${formatDuration(performance.now() - started)}`);
+			if (started !== undefined) ctx.ui.setWorkingMessage(`Working • ${formatDuration(performance.now() - started)}`);
 		};
 		update();
 		timer = setInterval(update, 1000);

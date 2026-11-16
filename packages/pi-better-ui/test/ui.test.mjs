@@ -107,7 +107,7 @@ test("sticky prompts handle live growth, narrow windows, long Unicode input, and
 });
 
 test("duration and completion labels use the requested units and local clock", () => {
-	for (const [ms, text] of [[100, "<1s"], [15_999, "15s"], [60_000, "1m 0s"], [125_000, "2m 5s"], [3_605_000, "1h 0m 5s"]]) {
+	for (const [ms, text] of [[100, "0s"], [15_999, "15s"], [60_000, "1m 0s"], [125_000, "2m 5s"], [3_605_000, "1h 0m 5s"]]) {
 		assert.equal(formatDuration(ms), text);
 	}
 	assert.equal(completionText(15_000, new Date(2026, 10, 16, 21, 15)), "Worked for 15s • 9:15 PM");
@@ -129,10 +129,10 @@ test("working duration spans repeated agent starts and records one display-only 
 	});
 	const ctx = { mode: "tui", ui: { setWorkingMessage: value => working.push(value) } };
 	events.get("agent_start")({}, ctx);
-	assert.equal(working[0], "Working <1s");
+	assert.equal(working[0], "Working • 0s");
 	now = 1500;
 	update();
-	assert.equal(working.at(-1), "Working 1s");
+	assert.equal(working.at(-1), "Working • 1s");
 	events.get("agent_start")({}, ctx);
 	now = 3200;
 	events.get("agent_settled")({ aborted: false }, ctx);
