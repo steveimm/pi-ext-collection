@@ -1,6 +1,6 @@
 {
   "name": "@steveimm/pi-queue-message",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Toggle queued Pi messages or interrupt to send them immediately",
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "1.5.1",
