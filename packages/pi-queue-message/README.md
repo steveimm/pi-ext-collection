@@ -42,6 +42,7 @@ The extension shows a separate hint above the input/working row:
 
 **tab** toggle steering or follow up  **alt+s** force send
 
+On macOS, use Option+S and the hint displays **option+s**.
 The hint appears when there are unsent messages and the editor has focus.
 With a draft in the input, only the force-send hint appears.
 Pi's own pending-message text and edit-all hint remain unchanged.

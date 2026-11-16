@@ -81,7 +81,8 @@ export default function (pi: ExtensionAPI) {
 			const display = this;
 			ctx.ui.setWidget("pi-queue-message", (_ui, theme) => {
 				const toggle = theme.style("tab", { fg: "text", bold: true }) + theme.fg("dim", " toggle steering or follow up");
-				const send = theme.style("alt+s", { fg: "text", bold: true }) + theme.fg("dim", " force send");
+				const sendKey = process.platform === "darwin" ? "option+s" : "alt+s";
+				const send = theme.style(sendKey, { fg: "text", bold: true }) + theme.fg("dim", " force send");
 				const hint = new Text("", 0, 0);
 				return {
 					render(width: number) {

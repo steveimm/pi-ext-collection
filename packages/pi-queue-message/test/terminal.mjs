@@ -15,7 +15,8 @@ const backgroundPath = fileURLToPath(new URL("../../pi-background", import.meta.
 const providerSource = fileURLToPath(new URL("fixtures/provider.js", import.meta.url));
 const cliPath = join(dirname(fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"))), "bundle/cli.js");
 const toggleHint = "tab toggle steering or follow up";
-const forceHint = "alt+s force send";
+const forceKey = process.platform === "darwin" ? "option+s" : "alt+s";
+const forceHint = `${forceKey} force send`;
 
 function quote(value) { return `'${value.replace(/'/g, `'\''`)}'`; }
 
@@ -110,7 +111,7 @@ async function run(mode, order, withImage = false) {
 		const hintIndex = lines.findIndex(line => line.includes(toggleHint));
 		assert(hintIndex > lastMessage + 1, "The extension hint must be outside the native pending-message block.");
 		assert(lines.slice(hintIndex + 1).some(line => line.includes("Working")), "The hint must be above the working/input row.");
-		assertKeyHints(screen(true).split("\n").find(line => stripTerminalSequences(line).includes(toggleHint)), ["tab", "alt+s"]);
+		assertKeyHints(screen(true).split("\n").find(line => stripTerminalSequences(line).includes(toggleHint)), ["tab", forceKey]);
 		assert(!screen().includes("tab follow-up all"));
 		assert(!screen().includes("tab steer all"));
 
@@ -239,7 +240,7 @@ async function run(mode, order, withImage = false) {
 			keys("-l", `DRAFT_${stage}`);
 			await expectScreen(forceHint);
 			assert(!screen().includes(toggleHint));
-			assertKeyHints(screen(true).split("\n").find(line => stripTerminalSequences(line).includes(forceHint)), ["alt+s"]);
+			assertKeyHints(screen(true).split("\n").find(line => stripTerminalSequences(line).includes(forceHint)), [forceKey]);
 			keys("M-s", "M-s");
 			await wait(() => messages().some(message => message.role === "assistant" && messageText(message).startsWith(`FORCED_REPLY:SEND_FIRST_${stage}`)), `forced ${stage} reply`);
 			await wait(() => existsSync(join(root, "settled")), `forced ${stage} settled`);
