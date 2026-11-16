@@ -23,7 +23,10 @@ function resolveDirectory(input: string, cwd: string): string {
 
 function describeError(error: unknown): string {
 	const code = (error as NodeJS.ErrnoException)?.code;
-	if (code === "ENOENT") return "The directory or session file does not exist.";
+	if (code === "ENOENT") {
+		const path = (error as NodeJS.ErrnoException & { path?: string }).path;
+		return `The directory or session file does not exist${path ? `: ${path}` : "."}`;
+	}
 	if (code === "ENOTDIR") return "Part of the path is not a directory.";
 	if (code === "EACCES" || code === "EPERM") return "Permission denied while accessing the directory or session file.";
 	if (code === "EEXIST") return "A session file already exists at the destination. It was not overwritten.";
@@ -97,8 +100,10 @@ export default function (pi: ExtensionAPI) {
 
 			changingDirectory = true;
 			try {
+				let notificationContext = ctx;
 				const result = await ctx.switchSession(move.path, {
 					withSession: async (next) => {
+						notificationContext = next;
 						try {
 							if (existsSync(move.source)) {
 								if (!move.content || !readFileSync(move.source).equals(move.content)) {
@@ -110,12 +115,15 @@ export default function (pi: ExtensionAPI) {
 						} catch (error) {
 							next.ui.notify(`Directory changed, but the old transcript was kept at ${move.source}: ${describeError(error)}`, "warning");
 						}
-						next.ui.notify(`Changed directory to ${next.cwd}`, "info");
 					},
 				});
 				if (result.cancelled) {
 					unlinkSync(move.path);
 					ctx.ui.notify("Directory change cancelled.", "info");
+				} else {
+					const { ui, mode, cwd } = notificationContext;
+					const path = mode === "tui" ? ui.theme.fg("accent", cwd) : cwd;
+					ui.notify(`Changed working directory to ${path}`, "info");
 				}
 			} catch (error) {
 				// Pi may stop the old runtime before the switch fails. Keep both files for recovery.

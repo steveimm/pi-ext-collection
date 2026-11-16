@@ -79,11 +79,12 @@ export default function (pi) {
 }
 
 test("moves a branched conversation and reloads project resources and tool cwd", { timeout: 20000 }, async t => {
-	const { client, a, b, source, firstReply, lastReply, probe } = await start(t);
+	const { client, a, b, source, firstReply, lastReply, probe, events } = await start(t);
 	await client.prompt(`/test-branch ${firstReply}`);
 	const before = await client.getState();
 	const entriesBefore = (await client.getEntries()).entries;
 	await client.prompt('/cd "../b space"');
+	assert(events.some(event => event.message === `Changed working directory to ${b}`));
 	const after = await client.getState();
 	const state = await probe();
 	assert.equal(state.cwd, b);
@@ -128,7 +129,7 @@ test("invalid, inaccessible, and equivalent paths leave the session intact", { t
 		assert.equal(readFileSync(original, "utf8"), content, argument);
 		assert.equal((await probe()).cwd, a, argument);
 	}
-	assert(events.some(event => event.message?.includes("does not exist")));
+	assert(events.some(event => event.message === `Cannot change directory: The directory or session file does not exist: ${join(a, "missing")}`));
 	assert(events.some(event => event.message?.includes("Not a directory")));
 	assert(events.some(event => event.message?.includes("Close the quote")));
 	assert(events.some(event => event.message?.includes("Already in")));
@@ -170,6 +171,7 @@ test("a cancelled switch removes the new file and preserves the original", { tim
 	assert.equal(readFileSync(original, "utf8"), content);
 	assert.notEqual((await probe()).cwd, b);
 	assert(events.some(event => event.message === "Directory change cancelled."));
+	assert(!events.some(event => event.message?.startsWith("Changed working directory to")));
 	const sessionsRoot = join(dirname(dirname(original)), "agent/sessions");
 	for (const folder of readdirSync(sessionsRoot)) assert.deepEqual(readdirSync(join(sessionsRoot, folder)), []);
 });
