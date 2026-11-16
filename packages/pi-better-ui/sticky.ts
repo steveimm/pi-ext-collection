@@ -1,28 +1,25 @@
-import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
-import { isViewportTUI, ScrollView, stripTerminalSequences, truncateToWidth, visibleWidth, VStack, type Component, type TUI } from "@earendil-works/pi-tui";
+import { UserMessageComponent, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
+import { isViewportTUI, stripTerminalSequences, truncateToWidth, visibleWidth, VStack, type Component, type ScrollView, type TUI } from "@earendil-works/pi-tui";
 
 export type PromptRange = { start: number; end: number; text: string };
 
-export function findPrompts(lines: readonly string[]): PromptRange[] {
+export function findPrompts(document: Component, lines: readonly string[]): PromptRange[] {
 	const prompts: PromptRange[] = [];
-	let current: PromptRange | undefined;
-	for (let index = 0; index < lines.length; index++) {
-		const line = lines[index]!;
-		if (line.includes("\x1b]133;A")) {
-			current = { start: index, end: lines.length, text: "" };
-			prompts.push(current);
+	function visit(component: Component, start: number, height: number) {
+		if (component instanceof UserMessageComponent) {
+			let text = "";
+			for (let row = start; row < start + height && row < lines.length && text.length < 512; row++) {
+				text = `${text} ${stripTerminalSequences(lines[row]!).replace(/[\u0000-\u001f\u007f]/g, " ")}`.trim().slice(0, 512);
+			}
+			prompts.push({ start, end: start + height, text: text.replace(/\s+/gu, " ") });
+			return;
 		}
-		if (!current) continue;
-		if (current.text.length < 512) {
-			const text = stripTerminalSequences(line).replace(/[\u0000-\u001f\u007f]/g, " ").trim();
-			current.text = `${current.text} ${text}`.trim().slice(0, 512);
-		}
-		if (line.includes("\x1b]133;B")) {
-			current.end = index + 1;
-			current.text = current.text.replace(/\s+/gu, " ");
-			current = undefined;
-		}
+		if (!("mouseLayout" in component) || !component.mouseLayout) return;
+		const layout = component.mouseLayout as { children: { component: Component; height: number }[] };
+		let row = start;
+		for (const child of layout.children) { visit(child.component, row, child.height); row += child.height; }
 	}
+	visit(document, 0, lines.length);
 	return prompts;
 }
 
@@ -43,7 +40,10 @@ function layoutRoot(tui: TUI): Component | undefined {
 }
 
 function findTranscript(component: Component): ScrollView | undefined {
-	if (component instanceof ScrollView && component.primary) return component;
+	if ("primary" in component && component.primary === true
+		&& "scrollTop" in component && typeof component.scrollTop === "number"
+		&& "getContentWidth" in component && typeof component.getContentWidth === "function"
+		&& "updateLayout" in component && typeof component.updateLayout === "function") return component as ScrollView;
 	if (!("children" in component) || !Array.isArray(component.children)) return;
 	for (const child of component.children as Component[]) {
 		const scroll = findTranscript(child);
@@ -62,8 +62,11 @@ export function attachStickyPrompt(tui: TUI, originalRoot: Component, scroll: Sc
 	let shown: string | undefined;
 	let disposed = false;
 
-	function selected(top: number): string | undefined {
-		return width >= 16 && tui.terminal.rows >= 6 && scroll.viewportHeight > 0 ? promptAbove(prompts, top) : undefined;
+	function selected(contentHeight: number, availableHeight: number): string | undefined {
+		if (width < 16 || tui.terminal.rows < 6 || availableHeight < 4) return;
+		if (!scroll.isFollowingEnd) return promptAbove(prompts, scroll.scrollTop);
+		const withoutHeader = promptAbove(prompts, Math.max(0, contentHeight - availableHeight));
+		return withoutHeader === undefined ? undefined : promptAbove(prompts, Math.max(0, contentHeight - availableHeight + 1));
 	}
 
 	const header: Component = {
@@ -73,9 +76,8 @@ export function attachStickyPrompt(tui: TUI, originalRoot: Component, scroll: Sc
 			const contentWidth = scroll.getContentWidth(columns);
 			const lines = originalRender.call(document, contentWidth);
 			prefetched = { width: contentWidth, lines };
-			prompts = findPrompts(lines);
-			const top = scroll.isFollowingEnd ? Math.max(0, lines.length - scroll.viewportHeight) : scroll.scrollTop;
-			shown = selected(top);
+			prompts = findPrompts(document, lines);
+			shown = selected(lines.length, scroll.viewportHeight + (shown === undefined ? 0 : 1));
 			if (shown === undefined) return [];
 			const text = truncateToWidth(` › ${shown}`, columns, "…");
 			return [theme().bg("userMessageBg", theme().fg("userMessageText", text + " ".repeat(Math.max(0, columns - visibleWidth(text)))))];
@@ -90,7 +92,7 @@ export function attachStickyPrompt(tui: TUI, originalRoot: Component, scroll: Sc
 	};
 	const updateLayout: ScrollView["updateLayout"] = (contentHeight, viewportHeight, requestRender) => {
 		originalLayout.call(scroll, contentHeight, viewportHeight, requestRender);
-		if (!disposed && selected(scroll.scrollTop) !== shown) requestRender();
+		if (!disposed && selected(contentHeight, viewportHeight + (shown === undefined ? 0 : 1)) !== shown) requestRender();
 	};
 	const root = new VStack([
 		{ component: header, basis: "auto", grow: 0, shrink: 0, maxSize: 1 },
