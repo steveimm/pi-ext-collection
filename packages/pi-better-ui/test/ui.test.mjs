@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { UserMessageComponent } from "@earendil-works/pi-coding-agent";
+import { convertToLlm, prepareBranchEntries, SessionManager, UserMessageComponent } from "@earendil-works/pi-coding-agent";
 import { ScrollView, stripTerminalSequences, Text, TuiAltScreen, VStack, visibleWidth } from "@earendil-works/pi-tui";
 import { attachStickyPrompt, findPrompts, promptAbove } from "../sticky.ts";
-import { completionText, formatDuration, registerTiming, timingMessageType } from "../timing.ts";
+import { completionText, formatDuration, registerTiming, timingEntryType } from "../timing.ts";
 
 const { renderLayoutFrame } = await import(new URL("./layout.js", import.meta.resolve("@earendil-works/pi-tui")));
+const { prepareCompaction } = await import(new URL("./core/compaction/compaction.js", import.meta.resolve("@earendil-works/pi-coding-agent")));
 const begin = "\x1b]133;A\x07";
 const end = "\x1b]133;B\x07\x1b]133;C\x07";
 
@@ -125,7 +126,8 @@ test("working duration spans repeated agent starts and records one display-only 
 	const sent = [];
 	const working = [];
 	registerTiming({
-		on: (type, handler) => events.set(type, handler), registerMessageRenderer() {}, sendMessage: (...args) => sent.push(args),
+		on: (type, handler) => events.set(type, handler), registerMessageRenderer() {}, registerEntryRenderer() {},
+		appendEntry: (...args) => sent.push(args),
 	});
 	const ctx = { mode: "tui", ui: { setWorkingMessage: value => working.push(value) } };
 	events.get("agent_start")({}, ctx);
@@ -139,15 +141,23 @@ test("working duration spans repeated agent starts and records one display-only 
 	events.get("agent_settled")({ aborted: false }, ctx);
 	assert.equal(intervals.length, 1);
 	assert.equal(sent.length, 1);
-	assert.match(sent[0][0].content, /^Worked for 3s • /);
-	assert.equal(sent[0][0].details.durationMs, 3200);
-	assert.equal(sent[0][0].display, true);
-	assert.equal(sent[0][1].triggerTurn, false);
+	assert.equal(sent[0][0], timingEntryType);
+	assert.match(sent[0][1].text, /^Worked for 3s • /);
+	assert.equal(sent[0][1].durationMs, 3200);
 	assert.equal(working.at(-1), undefined);
 	assert.deepEqual(cleared, intervals);
 	const user = { role: "user", content: "hello" };
 	const notice = { role: "custom", customType: "other", content: "keep" };
-	assert.deepEqual(events.get("context")({ messages: [user, { role: "custom", customType: timingMessageType }, notice] }).messages, [user, notice]);
+	const legacy = { role: "custom", customType: timingEntryType, content: "Worked for 3s • 9:15 PM" };
+	assert.deepEqual(events.get("context")({ messages: [user, legacy, notice] }).messages, [user, notice]);
+	const preparation = { messagesToSummarize: [user, legacy, notice], turnPrefixMessages: [legacy, user] };
+	events.get("session_before_compact")({ preparation });
+	assert.deepEqual(preparation.messagesToSummarize, [user, notice]);
+	assert.deepEqual(preparation.turnPrefixMessages, [user]);
+	const retained = { type: "custom_message", customType: "other", content: "keep" };
+	const entries = [{ type: "custom_message", customType: timingEntryType, content: legacy.content }, retained];
+	events.get("session_before_tree")({ preparation: { entriesToSummarize: entries } });
+	assert.deepEqual(entries, [retained]);
 
 	events.get("agent_start")({}, ctx);
 	events.get("session_shutdown")({}, ctx);
@@ -156,4 +166,30 @@ test("working duration spans repeated agent starts and records one display-only 
 	assert.equal(cleared.length, 2);
 	events.get("agent_start")({}, { ...ctx, mode: "rpc" });
 	assert.equal(intervals.length, 2);
+});
+
+test("timing metadata stays out of native context and summary preparation without extension filters", () => {
+	const session = SessionManager.inMemory();
+	const user = text => ({ role: "user", content: text, timestamp: Date.now() });
+	const assistant = text => ({ role: "assistant", content: [{ type: "text", text }], stopReason: "stop", timestamp: Date.now() });
+	session.appendMessage(user("First question"));
+	session.appendMessage(assistant("First answer"));
+	const data = { text: "Worked for 15s • 9:15 PM", durationMs: 15_000, completedAt: "2026-11-16T12:15:00.000Z" };
+	session.appendCustomEntry(timingEntryType, data);
+	session.appendCustomMessageEntry("other", "Keep this notice", true);
+	session.appendMessage(user("Second question"));
+	session.appendMessage(assistant("Second answer"));
+	const entries = session.getBranch();
+	assert.deepEqual(entries.find(entry => entry.type === "custom" && entry.customType === timingEntryType).data, data);
+	const context = convertToLlm(session.buildSessionProjection().messages);
+	const preparation = prepareCompaction(entries, { enabled: true, reserveTokens: 1024, keepRecentTokens: 1 });
+	assert(preparation);
+	const summaries = [...preparation.messagesToSummarize, ...preparation.turnPrefixMessages];
+	const branch = prepareBranchEntries(entries).messages;
+	for (const messages of [context, summaries, branch]) {
+		const text = JSON.stringify(messages);
+		assert(!text.includes("Worked for"));
+		assert(!text.includes(timingEntryType));
+		assert(text.includes("Keep this notice"));
+	}
 });

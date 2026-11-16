@@ -1,7 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 
-export const timingMessageType = "pi-better-ui/worked";
+export const timingEntryType = "pi-better-ui/worked";
+type TimingEntry = { text: string; durationMs: number; completedAt: string };
 
 export function formatDuration(milliseconds: number): string {
 	const seconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -26,9 +27,25 @@ export function registerTiming(pi: ExtensionAPI): void {
 		started = undefined;
 	}
 
-	pi.registerMessageRenderer(timingMessageType, (message, options, theme) =>
+	pi.registerEntryRenderer<TimingEntry>(timingEntryType, (entry, _options, theme) => entry.data
+		? new Text(theme.fg("dim", entry.data.text), pi.getSettings().outputPad ?? 1, 0) : undefined);
+
+	// Earlier builds stored timing lines as conversation messages.
+	const keepMessage = (message: { role: string; customType?: string }) => message.role !== "custom" || message.customType !== timingEntryType;
+	pi.registerMessageRenderer(timingEntryType, (message, options, theme) =>
 		new Text(theme.fg("dim", typeof message.content === "string" ? message.content : ""), options.outputPad ?? 1, 0));
-	pi.on("context", event => ({ messages: event.messages.filter(message => message.role !== "custom" || message.customType !== timingMessageType) }));
+	pi.on("context", event => ({ messages: event.messages.filter(keepMessage) }));
+	pi.on("session_before_compact", ({ preparation }) => {
+		preparation.messagesToSummarize = preparation.messagesToSummarize.filter(keepMessage);
+		preparation.turnPrefixMessages = preparation.turnPrefixMessages.filter(keepMessage);
+	});
+	pi.on("session_before_tree", ({ preparation }) => {
+		const entries = preparation.entriesToSummarize;
+		for (let i = entries.length - 1; i >= 0; i--) {
+			const entry = entries[i]!;
+			if (entry.type === "custom_message" && entry.customType === timingEntryType) entries.splice(i, 1);
+		}
+	});
 	pi.on("agent_start", (_event, ctx) => {
 		if (ctx.mode !== "tui" || started !== undefined) return;
 		started = performance.now();
@@ -45,12 +62,11 @@ export function registerTiming(pi: ExtensionAPI): void {
 		const completedAt = new Date();
 		stop();
 		ctx.ui.setWorkingMessage();
-		pi.sendMessage({
-			customType: timingMessageType,
-			content: completionText(durationMs, completedAt),
-			details: { durationMs, completedAt: completedAt.toISOString() },
-			display: true,
-		}, { triggerTurn: false });
+		pi.appendEntry<TimingEntry>(timingEntryType, {
+			text: completionText(durationMs, completedAt),
+			durationMs,
+			completedAt: completedAt.toISOString(),
+		});
 	});
 	pi.on("session_shutdown", (_event, ctx) => {
 		stop();

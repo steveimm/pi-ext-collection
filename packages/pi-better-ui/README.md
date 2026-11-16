@@ -44,8 +44,9 @@ Worked for 15s • 9:15 PM
 The duration covers the whole run, including model requests, tools, retries, and waiting time.
 The timestamp uses the local clock.
 Interrupted runs also receive a timing line.
-These lines are saved in the session and remain visible after reload or resume.
-The extension filters them from model requests and does not make extra model calls.
+These lines are saved as UI metadata in the session and remain visible after reload or resume.
+They are excluded from model requests, compaction, and branch summaries and do not make extra model calls.
+Timing messages saved by earlier builds are filtered from those paths while the extension is loaded.
 Timing works in fullscreen and regular modes.
 
 ## Development
