@@ -27,7 +27,7 @@ const commandFields = {
 	command: Type.Optional(shellCommand),
 	cwd: Type.Optional(Type.String({ description: "Working directory, relative to the current session by default." })),
 	label: Type.Optional(Type.String({ description: "Short description of the work." })),
-	instruction: Type.Optional(Type.String({ description: "What to do when this process finishes or this watcher notifies you." })),
+	instruction: Type.Optional(Type.String({ description: "What to do when this process finishes or this watcher notifies you. Keep it brief." })),
 	timeout_seconds: Type.Optional(Type.Number({ minimum: 1, maximum: 2147483 })),
 };
 
@@ -39,7 +39,7 @@ const watcherInterval = Type.Number({ minimum: 1, maximum: 86400,
 	description: "Delay in seconds between reminders or checks. Shell checks default to 30 seconds.",
 });
 const watcherInstruction = Type.String({ minLength: 1,
-	description: "What to remind the user about or do when notified.",
+	description: "What to remind the user about or do when notified. Keep it brief.",
 });
 const processOutput = Type.Object({
 	...taskOutputFields,
