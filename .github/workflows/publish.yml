@@ -10,6 +10,7 @@ on:
         required: true
         options:
           - pi-background
+          - pi-better-ui
           - pi-change-dir
           - pi-chat-template-kwargs
           - pi-queue-message

@@ -13,6 +13,7 @@ The root npm package is private and is not published.
 | [Background work](packages/pi-background/README.md) | `@steveimm/pi-background` | Run background commands, checks, and reminders. View and stop tasks with `/bg`. |
 | [Queue message](packages/pi-queue-message/README.md) | `@steveimm/pi-queue-message` | Toggle queued messages with Tab or interrupt and send them with Alt+S. |
 | [Web search](packages/pi-web-search/README.md) | `@steveimm/pi-web-search` | Search with Exa and read web pages with cached chunks and text lookup. |
+| [Better UI](packages/pi-better-ui/README.md) | `@steveimm/pi-better-ui` | Pin user prompts while scrolling and show response duration. |
 
 Install each package independently:
 
@@ -24,6 +25,7 @@ pi install npm:@steveimm/pi-chat-template-kwargs
 
 ```text
 packages/
+  pi-better-ui/
   pi-web-search/
   pi-queue-message/
   pi-background/

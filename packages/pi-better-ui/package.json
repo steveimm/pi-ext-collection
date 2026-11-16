@@ -1,0 +1,48 @@
+{
+  "name": "@steveimm/pi-better-ui",
+  "version": "0.1.0",
+  "description": "Sticky user prompts and response timing for Pi",
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.1",
+    "@earendil-works/pi-tui": "1.5.1"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "test:terminal": "node test/terminal.mjs"
+  },
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steveimm/pi-ext-collection.git",
+    "directory": "packages/pi-better-ui"
+  },
+  "homepage": "https://github.com/steveimm/pi-ext-collection/tree/main/packages/pi-better-ui#readme",
+  "bugs": {
+    "url": "https://github.com/steveimm/pi-ext-collection/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "files": [
+    "*.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=1.5.1",
+    "@earendil-works/pi-tui": ">=1.5.1"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}
