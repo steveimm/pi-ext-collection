@@ -14,6 +14,14 @@ export default function (pi) {
 	pi.on("agent_settled", () => writeFileSync("settled", ""));
 	pi.registerCommand("test-reload", { handler: async (_args, ctx) => { await ctx.reload(); } });
 	pi.registerCommand("test-mode", { handler: args => active.switchTuiMode(args) });
+	pi.registerCommand("test-legacy-timing", { handler: async () => {
+		pi.sendMessage({ customType: "pi-better-ui/worked", content: "Worked for 999s • 9:15 PM", display: true });
+	} });
+	pi.registerCommand("test-branch-summary", { handler: async (_args, ctx) => {
+		const target = ctx.sessionManager.getBranch().find(entry => entry.type === "message" && entry.message.role === "user");
+		await ctx.navigateTree(target.id, { summarize: true });
+		writeFileSync("branch-summarized", "");
+	} });
 	pi.registerShortcut("ctrl+y", { handler: ctx => {
 		writeFileSync("ui-state.json", JSON.stringify({ mode: active.ui.mode, text: ctx.ui.getEditorText(), scrollTop: active.transcriptScrollView.scrollTop }));
 	} });
@@ -26,7 +34,9 @@ export default function (pi) {
 			appendFileSync("requests.jsonl", `${JSON.stringify(context.messages)}\n`);
 			const latest = context.messages.filter(message => message.role === "user").at(-1);
 			const text = typeof latest.content === "string" ? latest.content : latest.content.filter(part => part.type === "text").map(part => part.text).join("\n");
-			const name = text.split(" ")[0];
+			const summarizing = context.messages.some(item => item.role === "system"
+				&& typeof item.content === "string" && item.content.startsWith("You are a context summarization assistant."));
+			const name = summarizing ? "SUMMARY" : text.split(" ")[0];
 			const message = {
 				role: "assistant", api: model.api, provider: model.provider, model: model.id,
 				content: [{ type: "text", text: "" }], stopReason: "stop", timestamp: Date.now(),
@@ -47,7 +57,7 @@ export default function (pi) {
 						message.content = [{ type: "toolCall", id: "timed-tool", name: "bash", arguments: { command: "sleep 1; printf tool-done" } }];
 						message.stopReason = "toolUse";
 					} else {
-						message.content = [{ type: "text", text: Array.from({ length: 100 }, (_, i) => `${name}_ANSWER_${i + 1}`).join("\n\n") }];
+						message.content = [{ type: "text", text: summarizing ? "Fixture summary." : Array.from({ length: 100 }, (_, i) => `${name}_ANSWER_${i + 1}`).join("\n\n") }];
 						stream.push({ type: "text_delta", contentIndex: 0, delta: message.content[0].text, partial: message });
 					}
 					stream.push({ type: "done", reason: message.stopReason, message });
@@ -60,6 +70,7 @@ export default function (pi) {
 				writeFileSync(`started-${name}`, "");
 				if (options.signal.aborted) return abort();
 				options.signal.addEventListener("abort", abort, { once: true });
+				if (summarizing) return finish();
 				interval = setInterval(() => { if (existsSync(`release-${name}`)) finish(); }, 20);
 			}, 10);
 			return stream;

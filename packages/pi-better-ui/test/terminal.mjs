@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -19,6 +19,8 @@ async function run(mode, order) {
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-better-ui-")));
 	const fixture = join(root, "provider.js");
 	copyFileSync(new URL("fixtures/provider.js", import.meta.url), fixture);
+	mkdirSync(join(root, "agent"));
+	writeFileSync(join(root, "agent/settings.json"), JSON.stringify({ compaction: { keepRecentTokens: 64 } }));
 	const socket = `pi-better-ui-${randomUUID()}`;
 	let started = false;
 	function tmux(...args) {
@@ -38,7 +40,7 @@ async function run(mode, order) {
 		const file = existsSync(directory) && readdirSync(directory).find(name => name.endsWith(".jsonl"));
 		return file ? readFileSync(join(directory, file), "utf8").trim().split("\n").map(line => JSON.parse(line)) : [];
 	}
-	const completions = () => entries().filter(entry => entry.type === "custom_message" && entry.customType === "pi-better-ui/worked");
+	const completions = () => entries().filter(entry => entry.type === "custom" && entry.customType === "pi-better-ui/worked");
 	async function state() {
 		rmSync(join(root, "ui-state.json"), { force: true });
 		keys("C-y");
@@ -65,8 +67,9 @@ async function run(mode, order) {
 		await send("FIRST first question");
 		await wait(() => screen().includes("Working • 1s"), "live duration beside Working");
 		await complete("FIRST", 1);
-		assert.match(completions()[0].content, /^Worked for \d+s • \d{1,2}:\d{2} [AP]M$/);
+		assert.match(completions()[0].data.text, /^Worked for \d+s • \d{1,2}:\d{2} [AP]M$/);
 		assert(!screen().includes("Working "));
+		await send("/test-legacy-timing");
 		assert.equal((await state()).mode, mode);
 		if (mode === "regular") {
 			assert(!screen().split("\n")[0].includes("› FIRST"));
@@ -104,7 +107,7 @@ async function run(mode, order) {
 		await send("TOOLS run a command");
 		await wait(() => existsSync(join(root, "started-TOOLS")), "tool run");
 		await complete("TOOLS", 3);
-		assert(completions()[2].details.durationMs >= 1000);
+		assert(completions()[2].data.durationMs >= 1000);
 		await send("ABORT stop this request");
 		await wait(() => existsSync(join(root, "started-ABORT")), "abortable response");
 		keys("Escape");
@@ -121,11 +124,27 @@ async function run(mode, order) {
 			await complete("FORCED", 6);
 			await wait(() => screen().split("\n")[0].includes("› FORCED queued message"), "sticky forced prompt");
 		}
-		assert(!readFileSync(join(root, "requests.jsonl"), "utf8").includes("Worked for"));
+		const saved = completions();
 		await send("/quit");
 		await wait(() => tmux("display-message", "-p", "-t", "verify", "#{pane_dead}").trim() === "1", "shutdown");
-		console.log(`${mode}, ${order}: sticky prompts, scrolling, resizing, mode changes, timing, context filtering, and reload passed.`);
+		const sessionFile = join(root, "sessions", readdirSync(join(root, "sessions")).find(name => name.endsWith(".jsonl")));
+		tmux("respawn-pane", "-k", "-t", "verify", "-c", root, `exec ${command} --session ${quote(sessionFile)}`);
+		await wait(() => screen().includes(saved.at(-1).data.text), "timing restored after process restart");
+		assert.deepEqual(completions(), saved);
+		await send("/compact");
+		await wait(() => entries().some(entry => entry.type === "compaction"), "compaction summary");
+		await send("/test-legacy-timing");
+		await send("/test-branch-summary");
+		await wait(() => existsSync(join(root, "branch-summarized")), "branch summary");
+		const requests = readFileSync(join(root, "requests.jsonl"), "utf8");
+		assert(requests.split("\n").filter(line => line.includes("You are a context summarization assistant.")).length >= 2);
+		assert(!requests.includes("Worked for"));
+		keys("C-u");
+		await send("/quit");
+		await wait(() => tmux("display-message", "-p", "-t", "verify", "#{pane_dead}").trim() === "1", "final shutdown");
+		console.log(`${mode}, ${order}: UI, resume, normal requests, compaction, and branch summaries passed.`);
 	} catch (error) {
+		if (existsSync(join(root, "requests.jsonl"))) console.error(readFileSync(join(root, "requests.jsonl"), "utf8").trim().split("\n").at(-1)?.slice(0, 2000));
 		if (started) console.error(await state());
 		if (started) console.error(tmux("capture-pane", "-t", "verify", "-p", "-S", "-65"));
 		throw error;
