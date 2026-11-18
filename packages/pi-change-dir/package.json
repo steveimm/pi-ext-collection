@@ -37,6 +37,7 @@
   "files": [
     "index.ts",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "completions.ts"
   ]
 }

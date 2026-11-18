@@ -2,6 +2,7 @@ import { accessSync, closeSync, constants, existsSync, openSync, readFileSync, r
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { SessionManager, type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { registerDirectoryCompletions } from "./completions.js";
 
 function resolveDirectory(input: string, cwd: string): string {
 	let path = input.trim();
@@ -65,6 +66,7 @@ function prepareSession(ctx: ExtensionCommandContext, directory: string): { path
 
 export default function (pi: ExtensionAPI) {
 	let changingDirectory = false;
+	registerDirectoryCompletions(pi);
 
 	pi.registerCommand("cd", {
 		description: "Change directory and continue this session. Use /cd <path>, or /cd to show the current directory.",
