@@ -4,7 +4,8 @@
   "description": "Change Pi working directory with /cd while continuing the current session",
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "test:terminal": "node test/terminal.mjs"
   },
   "keywords": [
     "pi-package"

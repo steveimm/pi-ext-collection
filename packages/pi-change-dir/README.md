@@ -35,6 +35,12 @@ Relative paths resolve from the active session's directory.
 Paths containing spaces can be quoted or entered directly.
 Shell variables, wildcards, and shell commands are not expanded.
 
+Press **Tab** after `/cd ` to list directories in the current session directory.
+With a path, **Tab** lists children of an existing directory or completes a partial directory name.
+Use **Up/Down** to select a directory and **Tab** to insert it, then press **Tab** again to browse inside it.
+Press **Enter** to change directory.
+Completion quotes paths containing spaces and supports relative paths, absolute paths, `~`, and directory symlinks.
+
 ## Behavior
 
 The extension preserves the session ID, conversation tree, active branch, name, and creation timestamp.
@@ -62,11 +68,13 @@ Run the checks from the repository root:
 ```bash
 npm run check
 npm test --workspace=packages/pi-change-dir
+npm run test:terminal --workspace=packages/pi-change-dir
 ```
 
 The tests launch Pi with temporary projects and configuration, without model requests.
 Set `PI_CHANGE_DIR_TEST_CLI` to another Pi installation's `dist/cli.js` to test that version.
 The MCP test runs only when that version includes MCP support.
+Terminal tests require tmux and check completion in regular and fullscreen modes without model requests.
 
 ## License
 
